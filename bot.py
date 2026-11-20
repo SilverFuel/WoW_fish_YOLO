@@ -1,170 +1,278 @@
-from monitor import get_monitor_dict, focus_window
-import time
+"""World of Warcraft fishing bot: cast, watch for the bobber splash, loot, repeat."""
+from __future__ import annotations
+
+import enum
 import random
-import pyautogui
-from ultralytics import YOLO
-import mss
-import numpy as np
-import cv2
+import sys
+import threading
+import time
+from dataclasses import dataclass
+from pathlib import Path
+
 import pyfiglet
-import keyboard
-from colorama import init as initColor, Fore
+from colorama import Fore, init as init_color
 
-initColor()
+CAST_DURATION_SEC = 20
+LURE_APPLY_WAIT_SEC = 5
+POLL_INTERVAL_SEC = 0.1
+PAUSE_HOTKEY = 'f8'
+QUIT_HOTKEY = 'f9'
+MODEL_PATH = Path(__file__).with_name('best.pt')
+DEVICE = 'cpu'  # e.g. 'cuda:0' if you installed a CUDA build of torch
 
-GAME_NAME = "World of Warcraft"
-CAST_DUREATION_SEC = 20
-FONT = pyfiglet.Figlet()
 
-fishing_key = 'f'
-lure_key = None
-lure_duration = 0
-last_lure = None
-is_fishing = False
-total = 0
-monitor_dict = get_monitor_dict(GAME_NAME)
+class CastResult(enum.Enum):
+    LOOTED = 'looted'
+    MISSED = 'missed'
+    INTERRUPTED = 'interrupted'
 
-print('Loading model...')
-model = YOLO('best.pt')
-model.to('cpu')
-print('Model loaded! The CPU will be used to predict.')
+
+@dataclass(frozen=True)
+class Config:
+    fishing_key: str
+    lure_key: str | None = None
+    lure_duration_sec: float = 0
+
+
+class FishingBot:
+    """Runs the fishing loop until stopped.
+
+    Keys and clicks are only sent while the game window is in the foreground,
+    so switching to another application pauses the bot instead of typing into it.
+    ``stop`` and ``toggle_pause`` may be called from another thread (the hotkeys).
+    """
+
+    def __init__(self, config, window, detector, controls, clock=time.monotonic, idle=time.sleep):
+        self._config = config
+        self._window = window
+        self._detector = detector
+        self._controls = controls
+        self._clock = clock
+        self._idle = idle
+        self._stop = threading.Event()
+        self._paused = threading.Event()
+        self._last_lure = None
+        self.loot_attempts = 0
+
+    def stop(self):
+        self._stop.set()
+
+    def toggle_pause(self):
+        if self._paused.is_set():
+            self._paused.clear()
+            print(Fore.CYAN + 'Resumed.' + Fore.RESET)
+        else:
+            self._paused.set()
+            print(Fore.CYAN + f'Paused. Press {PAUSE_HOTKEY.upper()} to resume.' + Fore.RESET)
+
+    def run(self):
+        self._window.focus()
+
+        while self._wait_until_ready():
+            self._apply_lure_if_due()
+            result = self._cast()
+
+            if result is CastResult.INTERRUPTED:
+                continue
+            if result is CastResult.MISSED:
+                print(
+                    Fore.MAGENTA + "No fish caught :( Sometimes the bot can miss. Be sure you are in first person view, have hidden your UI and the bobber is visible on screen" + Fore.RESET)
+
+            self._sleep(random.randrange(0, 3))
+
+    def _wait_until_ready(self):
+        """Block until input may be sent. Returns False once the bot should shut down."""
+        announced = False
+
+        while not self._stop.is_set():
+            if not self._window.exists():
+                print(Fore.RED + 'The game window was closed.' + Fore.RESET)
+                return False
+
+            if not self._paused.is_set():
+                if self._window.is_foreground() and self._window.capture_region() is not None:
+                    return True
+                if not announced:
+                    print(Fore.CYAN + 'Waiting for the game window to be in front. Nothing is sent to other windows.' + Fore.RESET)
+                    announced = True
+
+            self._idle(POLL_INTERVAL_SEC)
+
+        return False
+
+    def _can_act(self):
+        return not self._stop.is_set() and not self._paused.is_set() and self._window.is_foreground()
+
+    def _press(self, key):
+        if not self._can_act():
+            return False
+        self._controls.press(key)
+        return True
+
+    def _sleep(self, seconds):
+        """Sleep in short slices so the quit hotkey and CTRL+C take effect quickly."""
+        deadline = self._clock() + seconds
+
+        while not self._stop.is_set():
+            remaining = deadline - self._clock()
+            if remaining <= 0:
+                break
+            self._idle(min(remaining, POLL_INTERVAL_SEC))
+
+    def _apply_lure_if_due(self):
+        if not self._config.lure_key:
+            return
+
+        now = self._clock()
+        if self._last_lure is not None and now - self._last_lure <= self._config.lure_duration_sec:
+            return
+
+        if self._press(self._config.lure_key):
+            self._last_lure = now
+            print(f'Attach new lure ({self._config.lure_key} key) for {self._config.lure_duration_sec / 60:g} minutes.')
+            print(f'Waiting {LURE_APPLY_WAIT_SEC} seconds before continue...')
+            self._sleep(LURE_APPLY_WAIT_SEC)
+
+    def _cast(self):
+        if not self._press(self._config.fishing_key):
+            return CastResult.INTERRUPTED
+
+        print(Fore.CYAN + '\nStart fishing.' + Fore.RESET)
+        print(Fore.CYAN + 'Waiting for a fish...' + Fore.RESET)
+
+        deadline = self._clock() + CAST_DURATION_SEC
+        while self._clock() < deadline:
+            if not self._can_act():
+                return CastResult.INTERRUPTED
+
+            # Read on every frame, so the window can be moved or resized while fishing.
+            region = self._window.capture_region()
+            if region is None:
+                return CastResult.INTERRUPTED
+
+            position = self._detector.find_splash(region)
+            if position is not None:
+                return CastResult.LOOTED if self._loot(*position) else CastResult.INTERRUPTED
+
+        return CastResult.MISSED
+
+    # Right click on the bobber to loot the fish, player must enable automatic looting
+    def _loot(self, x, y):
+        self._sleep(random.random())
+        if not self._can_act():
+            return False
+        self._controls.moveTo(x, y, random.uniform(0.1, 0.3))
+
+        self._sleep(random.random())
+        if not self._can_act():
+            return False
+        self._controls.click(button='right')
+
+        self.loot_attempts += 1
+        print(Fore.GREEN + f'Splash at position x: {x}, y: {y} - looted!' + Fore.RESET)
+        print(f'Loot attempts this session: {self.loot_attempts}.')
+        return True
+
+
+def validate_key(raw, valid_keys):
+    """Return the normalised key name, or raise ValueError if the bot could not press it."""
+    key = raw.strip().lower()
+
+    if key in (PAUSE_HOTKEY, QUIT_HOTKEY):
+        raise ValueError(f"'{key}' is reserved for pausing/stopping the bot.")
+    # pyautogui silently ignores names it does not know, which would look like a bot that never casts.
+    if key not in valid_keys:
+        raise ValueError(f"'{key}' is not a key name the bot can press. Use names like f, 1, f5, space, num1.")
+
+    return key
+
+
+def ask_key(prompt, valid_keys, ask=input):
+    while True:
+        try:
+            return validate_key(ask(prompt), valid_keys)
+        except ValueError as error:
+            print(Fore.RED + str(error) + Fore.RESET)
+
+
+def ask_minutes(prompt, ask=input):
+    while True:
+        try:
+            minutes = int(ask(prompt).strip())
+        except ValueError:
+            minutes = 0
+
+        if minutes > 0:
+            return minutes
+        print(Fore.RED + 'Enter a whole number of minutes greater than 0, e.g. 10.' + Fore.RESET)
+
+
+def configure(valid_keys, ask=input):
+    fishing_key = ask_key('Provide the key for the fishing spell: ', valid_keys, ask)
+
+    if ask('Do you want to use lure ? (y/n) ').strip().lower() != 'y':
+        return Config(fishing_key)
+
+    lure_key = ask_key('Provide the key to use lure: ', valid_keys, ask)
+    lure_minutes = ask_minutes('Provide the lure duration (in minutes): ', ask)
+    return Config(fishing_key, lure_key, 60 * lure_minutes)
 
 
 def show_start_text():
     ascii_text = pyfiglet.figlet_format('WoW_Fish_YOLO')
-    colored_text = Fore.CYAN + ascii_text + Fore.RESET
-    print(colored_text)
+    print(Fore.CYAN + ascii_text + Fore.RESET)
+    print(Fore.RED + 'Make sure you have enabled the auto-loot feature in the game settings.' + Fore.RESET)
     print(
-        Fore.RED + "Please do not move your window. Make sure you have enabled the auto-loot feature in the game settings." + Fore.RESET)
-    print(
-        Fore.RED + "Additionally, for best results, zoom into the first person view and hide the UI by pressing ALT+W (or ALT+Z on QWERTY)." + Fore.RESET)
-    print("You can stop the bot by pressing CTRL+C.")
-
-def configure():
-    global fishing_key
-    global lure_key
-    global lure_duration
-
-    # Demander le bind pour lancer la canne
-    fishing_key = input("Provide the key for the fishing spell: ").lower()
-    use_lure = input("Do you want to use lure ? (y/n) ").lower()
-
-    if (use_lure == 'y'):
-        lure_key = input("Provide the key to use lure: ").lower()
-        lure_duration = int(input("Provide the lure duration (in minutes): "))
-        lure_duration = 60 * lure_duration
-
-def get_prediction():
-    with mss.mss() as sct:
-
-        sct_img = sct.grab(monitor_dict)
-        img = np.array(sct_img)
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
-
-        results = model.predict(source=img_rgb, conf=0.8, verbose=False)
-
-        if results:
-            boxes = results[0].boxes
-            for box in boxes:
-                x1, y1, x2, y2 = box.xyxy[0]
-                x_center = int((x1 + x2) / 2)
-                y_center = int((y1 + y2) / 2)
-
-                x_center_screen = monitor_dict['left'] + x_center
-                y_center_screen = monitor_dict['top'] + y_center
-
-                return x_center_screen, y_center_screen
-
-        return None, None
-
-# Right click on the bobber to loot the fish, player must enable automatic looting
-def catch_fish(x_center, y_center):
-    global total
-
-    time_to_wait = random.random()
-    time.sleep(time_to_wait) # Old value was 0.1
-    pyautogui.moveTo(x_center, y_center, random.uniform(0.1, 0.3))
-    print(Fore.GREEN + f'Fish caught at position x: {x_center}, y: {y_center} !' + Fore.RESET)
-
-    time_to_wait = random.random()
-    time.sleep(time_to_wait) # Old value was 0.1
-    pyautogui.click(button='right')
-    total += 1
+        Fore.RED + 'Additionally, for best results, zoom into the first person view and hide the UI by pressing ALT+W (or ALT+Z on QWERTY).' + Fore.RESET)
+    print(f'{PAUSE_HOTKEY.upper()} pauses/resumes the bot, {QUIT_HOTKEY.upper()} stops it (CTRL+C in this console also works).')
+    print('The bot only sends keys and clicks while the game window is in front.')
 
 
-def cast():
-    global is_fishing
+def main():
+    init_color()
+    show_start_text()
 
-    print(Fore.CYAN + '\nStart fishing.' + Fore.RESET)
-    pyautogui.press(fishing_key)
+    if sys.platform != 'win32':
+        print(Fore.RED + 'This bot only runs on Windows.' + Fore.RESET)
+        return 1
 
-    print(Fore.CYAN + 'Waiting for a fish...' + Fore.RESET)
+    # Imported here rather than at the top: these need Windows, and keeping them out of
+    # module scope lets the fishing loop above be imported and tested on any machine.
+    import keyboard
+    import pyautogui
+    from detector import SplashDetector
+    from game_window import GameWindowNotFound, find_game_window
 
-    start_time = time.time()
-    caught = False
-    while (time.time() - start_time < CAST_DUREATION_SEC) and is_fishing:
-        x_center, y_center = get_prediction()
-
-        if (x_center is not None and y_center is not None):
-            catch_fish(x_center, y_center)
-            caught = True
-            stop()
-            break
-
-    if (not caught):
-        print(
-            Fore.MAGENTA + "No fish caught :( Sometimes the bot can miss. Be sure you are in first person view, have hidden your UI and the bobber is visible on screen" + Fore.RESET)
-
-    restart()
-
-def focus_or_throw():
     try:
-        focus_window(GAME_NAME)
-    except Exception:
-        print(Fore.RED + f"No screens with the {GAME_NAME} window were found. Did you launch the game?" + Fore.RESET)
-        exit(1)
+        window = find_game_window()
+    except GameWindowNotFound as error:
+        print(Fore.RED + str(error) + Fore.RESET)
+        return 1
 
-def start():
-    global is_fishing
-    global last_lure
-    global lure_key
-
-    focus_or_throw()
-
-    if (lure_key):
-        if (not last_lure or time.time() - last_lure > lure_duration):
-            print(f'Attach new lure ({lure_key} key) for {lure_duration / 60} minutes.')
-            last_lure = time.time()
-            pyautogui.press(lure_key)
-            print('Waiting 5 seconds before continue...')
-            time.sleep(5)
-
-    is_fishing = True
-    cast()
-
-def stop():
-    global is_fishing
-    is_fishing = False
-    print(f"You caught {total} fish this session.")
-
-
-def restart():
-    time_to_wait = random.randrange(0, 3)
-    time.sleep(time_to_wait)
-    start()
-
-
-def init():
+    bot = None
     try:
-        configure()
-        start()
+        config = configure(pyautogui.KEYBOARD_KEYS)
+
+        print('Loading model...')
+        detector = SplashDetector(MODEL_PATH, DEVICE)
+        print(f'Model loaded! Predictions run on: {DEVICE}.')
+
+        bot = FishingBot(config, window, detector, pyautogui)
+        # On release, so holding the key down does not toggle pause over and over.
+        keyboard.add_hotkey(PAUSE_HOTKEY, bot.toggle_pause, trigger_on_release=True)
+        keyboard.add_hotkey(QUIT_HOTKEY, bot.stop)
+        bot.run()
     except KeyboardInterrupt:
         print(Fore.RED + 'Keyboard interrupt received. Exiting...' + Fore.RESET)
-        stop()
+    except pyautogui.FailSafeException:
+        print(Fore.RED + 'Mouse moved to a screen corner (pyautogui fail-safe). Exiting...' + Fore.RESET)
     finally:
-        print(Fore.RED + 'Clean up and exit.' + Fore.RESET)
+        keyboard.unhook_all_hotkeys()
+
+    if bot is not None:
+        print(f'Loot attempts this session: {bot.loot_attempts}.')
+    return 0
 
 
-if __name__ == "__main__":
-    show_start_text()
-    init()
+if __name__ == '__main__':
+    sys.exit(main())

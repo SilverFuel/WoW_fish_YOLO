@@ -65,8 +65,8 @@ class DemoControls:
     def moveTo(self, x, y, duration=0):
         self._game.events.append(('move', x, y))
 
-    def click(self, button='left'):
-        self._game.events.append(('click', button))
+    def click(self, x=None, y=None, button='left'):
+        self._game.events.append(('click', button, x, y))
         self._game.loot()
 
 
@@ -89,6 +89,10 @@ def find_game_window():
 
 def key_is_down(name):
     return False
+
+
+def permission_problems():
+    return []
 
 
 def create_controls():

@@ -217,11 +217,96 @@ def main():
         after = platform.key_is_down('f8')
         return (not before) and held and (not after), f'F8 read as {before} before, {held} while held, {after} after'
 
+    def in_front_report():
+        """How each way of asking "who is in front" answers right now (macOS has several)."""
+        if platform.SYSTEM != 'macos':
+            return f'is_foreground={window.is_foreground()}'
+        from AppKit import NSWorkspace
+        listed = platform._window_list(onscreen_only=True)
+        top = [(w.get('kCGWindowOwnerName'), w.get('kCGWindowLayer'), int(w['kCGWindowBounds'].get('Width', 0)),
+                int(w['kCGWindowBounds'].get('Height', 0))) for w in listed[:5]]
+        workspace = NSWorkspace.sharedWorkspace().frontmostApplication()
+        return (f'me={os.getpid()} window-order={platform.frontmost_pid(listed)} keyboard-focus={platform.focused_pid()} '
+                f'workspace={workspace.processIdentifier() if workspace is not None else None} top={top}')
+
+    @check('permissions and focus as the system reports them')
+    def _():
+        if platform.SYSTEM != 'macos':
+            return True, f'no permissions needed; {in_front_report()}'
+        return True, (f'screen recording allowed={platform.screen_recording_allowed()}, '
+                      f'accessibility allowed={platform.accessibility_allowed()}, problems={platform.permission_problems()}; '
+                      f'{in_front_report()}')
+
+    def from_a_thread(action):
+        """Run ``action`` on another thread while this one keeps the window alive; return what it returned."""
+        box = {}
+
+        def run():
+            try:
+                box['result'] = action()
+            except Exception as error:
+                box['result'] = f'{type(error).__name__}: {error}'
+
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+        while thread.is_alive():
+            pump(0.05)
+        return box.get('result')
+
+    def watch(seconds):
+        """Sample is_foreground for a while from a thread; return (samples, times it was False, a report)."""
+        def sample():
+            taken, lost, report_text = 0, 0, ''
+            deadline = time.monotonic() + seconds
+            while time.monotonic() < deadline:
+                taken += 1
+                if not window.is_foreground():
+                    lost += 1
+                    report_text = report_text or in_front_report()
+                time.sleep(0.03)
+            return taken, lost, report_text
+        return from_a_thread(sample)
+
+    # The fishing loop does three things from its own thread. Each is tried alone, to see which
+    # one (if any) makes the window stop counting as "in front".
+    for name, action in (('focus() from another thread', lambda: window.focus()),
+                         ('press a key from another thread', lambda: controls.press('f')),
+                         ('capture the screen from another thread', lambda: grabber.grab(region).shape)):
+        @check(f'still in front after: {name}')
+        def _(action=action):
+            outcome = from_a_thread(action)
+            taken, lost, report_text = watch(1.5)
+            return lost == 0, f'returned {outcome}; {taken} samples, not in front {lost} times; {report_text}'
+
     @check('one whole cast with the real fishing loop')
     def _():
         events.clear()
-        messages = []
-        bot = FishingBot(Settings(fishing_key='f', stop_after_misses=0), window, vision, controls, log=messages.append)
+        messages, trace = [], []
+        began = time.monotonic()
+
+        class Traced:
+            """Passes every call through, noting what the loop was told."""
+            def __init__(self, target, label):
+                self._target, self._label = target, label
+
+            def __getattr__(self, name):
+                method = getattr(self._target, name)
+
+                def call(*arguments, **keywords):
+                    result = method(*arguments, **keywords)
+                    if len(trace) < 28:
+                        shown = result if not isinstance(result, dict) else 'region'
+                        extra = ''
+                        if name == 'is_foreground' and not result:
+                            extra = ' ' + in_front_report()
+                        if name == 'find_splash':
+                            extra = f' score={vision.last.detection.score:.2f}'
+                        trace.append(f'{time.monotonic() - began:.2f}s {self._label}.{name}={shown}{extra}')
+                    return result
+                return call
+
+        bot = FishingBot(Settings(fishing_key='f', stop_after_misses=0), Traced(window, 'window'),
+                         Traced(vision, 'vision'), Traced(controls, 'controls'), log=messages.append)
         thread = threading.Thread(target=bot.run, daemon=True)
         thread.start()
         deadline = time.monotonic() + 40
@@ -232,9 +317,9 @@ def main():
         thread.join(5)
         clicks = [event for event in events if event[0] == 'button' and event[1] in (2, 3)]
         on_target = any(abs(event[2] - SPLASH[0]) <= NEAR and abs(event[3] - SPLASH[1]) <= NEAR for event in clicks)
-        return (bot.stats.looted >= 1 and ('key', 'f') in events and on_target,
-                f'casts {bot.stats.casts}, looted {bot.stats.looted}, final state {bot.state}; '
-                f'window received key f: {("key", "f") in events}, right-clicks: {clicks}; log: {messages[-2:]}')
+        passed = bot.stats.looted >= 1 and ('key', 'f') in events and on_target
+        return passed, (f'casts {bot.stats.casts}, looted {bot.stats.looted}; window received key f: {("key", "f") in events}, '
+                        f'right-clicks: {clicks}' + ('' if passed else f'; first calls: {trace}'))
 
     return finish(root)
 

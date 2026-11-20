@@ -78,6 +78,10 @@ def ask(helper, text='Set me up'):
     return helper.chat([{'role': 'user', 'content': text}])
 
 
+def ask_with(helper, messages):
+    return helper.chat(messages)
+
+
 # ----- reading the model's answer -----
 
 def test_strip_thinking_removes_reasoning_blocks():
@@ -256,14 +260,51 @@ def test_a_malformed_server_reply_is_an_error(helper, model_server):
 @pytest.mark.parametrize('messages', [
     None, [], 'hi', [{'role': 'user'}], [{'role': 'system', 'content': 'x'}],
     [{'role': 'user', 'content': ''}], [{'role': 'user', 'content': 'x' * 5000}],
+    [{'role': 'user', 'content': '   '}],
     [{'role': 'user', 'content': 'hi'}, {'role': 'assistant', 'content': 'yo'}],
-    [{'role': 'user', 'content': 'hi'}] * 21,
 ])
 def test_bad_conversations_are_refused_before_anything_is_sent(helper, model_server, messages):
     with pytest.raises(AssistantError):
         helper.chat(messages)
 
     assert model_server.requests == []
+
+
+def test_a_long_conversation_is_trimmed_instead_of_refused(helper, model_server):
+    history = []
+    for number in range(30):
+        history.append({'role': 'user', 'content': f'question {number}'})
+        history.append({'role': 'assistant', 'content': 'x' * 9000})  # longer than a message may be
+    history.append({'role': 'user', 'content': 'the latest question'})
+
+    assert ask_with(helper, history)['reply'] == 'Hello.'
+
+    sent = model_server.requests[-1][2]['messages'][1:]
+    assert len(sent) <= 20
+    assert sent[0]['role'] == 'user'  # never starts with the assistant
+    assert sent[-1] == {'role': 'user', 'content': 'the latest question'}
+    assert all(len(json.loads(message['content'])['reply']) == 4000 for message in sent if message['role'] == 'assistant')
+
+
+def test_a_server_that_does_not_speak_http_is_explained(helper):
+    import socket
+
+    listener = socket.socket()
+    listener.bind(('127.0.0.1', 0))
+    listener.listen(1)
+
+    def answer_with_garbage():
+        connection, _ = listener.accept()
+        connection.recv(65536)
+        connection.sendall(b'this is not http\r\n\r\n')
+        connection.close()
+
+    threading.Thread(target=answer_with_garbage, daemon=True).start()
+    helper._service.store.update({'assistant_url': f'http://127.0.0.1:{listener.getsockname()[1]}/v1'})
+
+    with pytest.raises(AssistantError, match='did not answer like a model server'):
+        ask(helper)
+    listener.close()
 
 
 def test_chat_is_refused_while_the_assistant_is_off(helper, model_server):

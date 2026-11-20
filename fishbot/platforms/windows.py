@@ -132,6 +132,10 @@ def key_is_down(name):
     return bool(win32api.GetAsyncKeyState(keys.WINDOWS_VK[name]) & 0x8000)
 
 
+def permission_problems():
+    return []
+
+
 def create_controls():
     import pyautogui
     return pyautogui

@@ -213,7 +213,8 @@ class FishingBot:
         self._sleep(random.random())
         if not self._can_act():
             return False
-        self._controls.click(button='right')
+        # Click at the splash itself: the pointer may have been moved since the line above.
+        self._controls.click(x=x, y=y, button='right')
 
         self.stats.looted += 1
         self.stats.misses_in_a_row = 0

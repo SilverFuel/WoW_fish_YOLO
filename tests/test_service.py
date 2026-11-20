@@ -19,6 +19,7 @@ class DemoPlatform:
         self.game = demo.DemoGame(bite_after=bite_after)
         self.keys_down = set()
         self.window_missing = False
+        self.missing_permissions = []
 
     def find_game_window(self):
         if self.window_missing:
@@ -27,6 +28,9 @@ class DemoPlatform:
 
     def key_is_down(self, name):
         return name in self.keys_down
+
+    def permission_problems(self):
+        return list(self.missing_permissions)
 
     def create_controls(self):
         return demo.DemoControls(self.game)
@@ -70,6 +74,36 @@ def test_will_not_start_when_the_game_is_not_running(service, platform):
 
     assert service.start() == ['No World of Warcraft game window was found. Is the game running?']
     assert service.snapshot()['state'] == 'idle'
+
+
+def test_will_not_start_until_the_system_allows_it(service, platform):
+    platform.missing_permissions = ['macOS is not letting the bot press keys or click.']
+
+    assert service.start() == ['macOS is not letting the bot press keys or click.']
+    assert service.check_setup() == {'ok': False, 'message': 'macOS is not letting the bot press keys or click.'}
+    assert not service.running
+    assert platform.game.events == []
+
+
+def test_status_is_still_answered_while_the_model_and_controls_load(service, platform):
+    release = threading.Event()
+    real_controls = platform.create_controls
+
+    def slow_controls():
+        release.wait(10)
+        return real_controls()
+
+    platform.create_controls = slow_controls
+    service.start()
+    try:
+        assert wait_for(lambda: service._load_lock.locked(), timeout=5)
+        started = time.monotonic()
+        snapshot = service.snapshot()
+        assert time.monotonic() - started < 0.5
+        assert snapshot['state'] == 'starting' and snapshot['running'] is True
+    finally:
+        release.set()
+    assert wait_for(lambda: service.snapshot()['state'] == 'fishing')
 
 
 def test_fishes_end_to_end_with_the_real_detector(service, platform):

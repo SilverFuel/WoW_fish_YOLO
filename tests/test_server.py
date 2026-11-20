@@ -106,6 +106,25 @@ def test_posts_must_be_json_objects_of_a_sane_size(app):
     assert call_json(app, 'POST', '/api/pause', {'paused': 'yes'})[0] == 400
 
 
+def test_deeply_nested_json_is_refused_not_fatal(app):
+    assert call_json(app, 'POST', '/api/settings', b'[' * 50_000)[0] == 400
+    assert call_json(app, 'GET', '/api/state')[0] == 200
+
+
+def test_a_bug_in_a_request_gets_an_answer_and_the_server_keeps_running(app, capsys):
+    def broken(since=0):
+        raise RuntimeError('unexpected')
+
+    working, app.service.snapshot = app.service.snapshot, broken
+    status, result = call_json(app, 'GET', '/api/state')
+    app.service.snapshot = working
+
+    assert status == 500
+    assert result == {'error': 'Something went wrong in the app. The details are in its console window.'}
+    assert 'RuntimeError: unexpected' in capsys.readouterr().err
+    assert call_json(app, 'GET', '/api/state')[0] == 200
+
+
 def test_state_reports_what_the_page_needs(app):
     status, state = call_json(app, 'GET', '/api/state')
 

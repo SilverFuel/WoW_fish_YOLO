@@ -1,4 +1,5 @@
 import json
+import threading
 
 import pytest
 
@@ -46,6 +47,10 @@ def test_valid_changes_are_applied_and_normalised():
     ({'lure_enabled': 'yes'}, 'lure_enabled'),
     ({'assistant_url': 'localhost:11434'}, 'assistant_url'),
     ({'assistant_url': 'file:///etc/passwd'}, 'assistant_url'),
+    ({'assistant_url': 'http://localhost:abc/v1'}, 'assistant_url'),
+    ({'assistant_url': 'http://local host:11434/v1'}, 'assistant_url'),
+    ({'cast_seconds': 10 ** 400}, 'cast_seconds'),
+    ({'confidence': '9' * 400}, 'confidence'),
     ({'assistant_model': ''}, 'assistant_model'),
     ({'not_a_setting': 1}, 'not_a_setting'),
     ({'fishing_key': None}, 'fishing_key'),
@@ -96,6 +101,35 @@ def test_swapping_both_hotkeys_in_one_change_is_allowed():
     assert (settings.pause_hotkey, settings.stop_hotkey) == ('f9', 'f8')
 
 
+def test_a_rejected_change_cannot_leave_a_clash_behind():
+    # Fishing is on F5. Moving pause to F5 is only fine if fishing really moves away, and it cannot
+    # move to F9 because that is the stop key. Neither change may be half applied.
+    current = Settings(fishing_key='f5')
+
+    settings, errors = change({'pause_hotkey': 'f5', 'fishing_key': 'f9'}, current)
+
+    assert settings == current
+    assert set(errors) == {'pause_hotkey', 'fishing_key'}
+
+
+def test_moving_the_fishing_key_onto_the_lure_key_is_refused_even_with_other_bad_changes():
+    current = Settings(fishing_key='f', lure_enabled=True, lure_key='g')
+
+    settings, errors = change({'fishing_key': 'g', 'lure_key': 'f8'}, current)
+
+    assert settings == current
+    assert set(errors) == {'fishing_key', 'lure_key'}
+
+
+def test_fishing_and_lure_keys_can_be_swapped_in_one_change():
+    current = Settings(fishing_key='f', lure_key='g')
+
+    settings, errors = change({'fishing_key': 'g', 'lure_key': 'f'}, current)
+
+    assert errors == {}
+    assert (settings.fishing_key, settings.lure_key) == ('g', 'f')
+
+
 def test_fishing_and_lure_need_different_keys():
     settings, errors = change({'lure_key': 'f'}, Settings(fishing_key='f'))
 
@@ -142,6 +176,32 @@ def test_store_keeps_good_values_from_a_file_with_some_bad_ones(tmp_path):
 
     assert settings.fishing_key == 'f'
     assert settings.cast_seconds == 20
+
+
+def test_store_keeps_every_change_when_many_arrive_at_once(tmp_path):
+    path = tmp_path / 'settings.json'
+    store = SettingsStore(path, 'windows')
+    failures = []
+
+    def writer(changes):
+        try:
+            for _ in range(40):
+                store.update(changes)
+                store.update({name: value + 1 for name, value in changes.items()})
+        except Exception as error:  # a failed save must not pass silently
+            failures.append(error)
+
+    threads = [threading.Thread(target=writer, args=(changes,)) for changes in (
+        {'cast_seconds': 30}, {'lure_minutes': 20}, {'checks_per_second': 8}, {'stop_after_minutes': 60})]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert failures == []
+    saved = json.loads(path.read_text())
+    assert (saved['cast_seconds'], saved['lure_minutes'], saved['checks_per_second'], saved['stop_after_minutes']) == (31, 21, 9, 61)
+    assert list(tmp_path.iterdir()) == [path]  # no temporary files left behind
 
 
 def test_store_does_not_rewrite_the_file_when_nothing_changed(tmp_path):

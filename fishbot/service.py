@@ -30,6 +30,7 @@ class BotService:
         self.store = store
         self._model_path = model_path
         self._lock = threading.RLock()
+        self._load_lock = threading.Lock()  # separate, so a slow load never blocks status requests
         self._thread = None
         self._bot = None
         self._starting = False
@@ -78,6 +79,10 @@ class BotService:
             except GameWindowNotFound as error:
                 return [str(error)]
 
+            missing = self.platform.permission_problems()
+            if missing:
+                return missing
+
             self._starting = True
             self._stop_while_starting = None
             self._message = ''
@@ -109,14 +114,14 @@ class BotService:
         self.wait(5)
 
     def _detector_for(self, threads):
-        with self._lock:
+        with self._load_lock:
             if self._detector is None or self._detector_threads != threads:
                 self._detector = SplashDetector(self._model_path, threads)
                 self._detector_threads = threads
             return self._detector
 
     def _controls_once(self):
-        with self._lock:
+        with self._load_lock:
             if self._controls is None:
                 self._controls = self.platform.create_controls()
             return self._controls
@@ -190,6 +195,10 @@ class BotService:
         except GameWindowNotFound as error:
             return {'ok': False, 'message': str(error)}
 
+        missing = self.platform.permission_problems()
+        if missing:
+            return {'ok': False, 'message': ' '.join(missing)}
+
         window.focus()
         deadline = time.monotonic() + FOCUS_WAIT_SEC
         while not window.is_foreground() and time.monotonic() < deadline:
@@ -217,8 +226,7 @@ class BotService:
 
         blank = looks_blank(sighting.frame)
         if blank:
-            message = ('The capture is black. On macOS, allow Screen Recording for your terminal in '
-                       'System Settings > Privacy & Security, then restart the app.')
+            message = 'The capture is black, so the bot cannot see the game. Is the game window covered or on a screen that is off?'
         elif not in_front:
             message = 'The game could not be brought to the front, so the picture may show another window.'
         else:

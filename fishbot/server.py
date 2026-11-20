@@ -13,6 +13,7 @@ import hmac
 import json
 import secrets
 import threading
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -146,6 +147,14 @@ class Handler(BaseHTTPRequestHandler):
         self.close_connection = True
         self._send_json({'error': message}, status)
 
+    def _crashed(self):
+        """Answer a request that hit a bug, so the page gets a message instead of a dropped connection."""
+        traceback.print_exc()
+        try:
+            self._fail(500, 'Something went wrong in the app. The details are in its console window.')
+        except OSError:
+            pass
+
     def _check_host(self):
         if self.headers.get('Host', '') not in self.app.allowed_hosts():
             raise BadRequest(403, 'This address is not allowed.')
@@ -171,7 +180,7 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             body = json.loads(self.rfile.read(length) or b'{}')
-        except ValueError:
+        except (ValueError, RecursionError):
             raise BadRequest(400, 'The request is not valid JSON.') from None
         if not isinstance(body, dict):
             raise BadRequest(400, 'The request must be a JSON object.')
@@ -200,6 +209,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json(self.app.api_get(url.path, parse_qs(url.query)))
         except BadRequest as error:
             self._fail(error.status, error.message)
+        except Exception:
+            self._crashed()
 
     def do_POST(self):
         try:
@@ -209,3 +220,5 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(self.app.api_post(urlparse(self.path).path, body))
         except BadRequest as error:
             self._fail(error.status, error.message)
+        except Exception:
+            self._crashed()

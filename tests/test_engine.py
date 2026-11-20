@@ -67,8 +67,8 @@ class FakeControls:
     def moveTo(self, x, y, duration):
         self._record('move', x, y)
 
-    def click(self, button):
-        self._record('click', button)
+    def click(self, x=None, y=None, button='left'):
+        self._record('click', button, (x, y))
 
     def count(self, kind):
         return sum(1 for event in self.events if event[0] == kind)
@@ -133,10 +133,19 @@ def test_one_catch_presses_the_key_then_right_clicks_the_splash():
 
     game.bot.run()
 
-    assert [event[:3] for event in game.controls.events] == [
-        ('press', 'f', 0.0), ('move', *SPLASH), ('click', 'right')]
+    assert game.controls.events == [('press', 'f', 0.0), ('move', *SPLASH), ('click', 'right', SPLASH)]
     assert game.window.focus_calls == 1
     assert game.bot.state == engine.STOPPED
+
+
+def test_the_click_names_the_splash_position_instead_of_trusting_the_pointer():
+    # The user may move the mouse during the short wait between the move and the click.
+    game = Game()
+    game.stop_after('click', 1)
+
+    game.bot.run()
+
+    assert game.controls.events[-1] == ('click', 'right', SPLASH)
 
 
 def test_sends_nothing_while_another_window_is_in_front():

@@ -3,6 +3,8 @@
 Positions here are in points, which is what both the mouse and the screen capture use, so a
 Retina display needs no special handling.
 """
+import contextlib
+
 from fishbot import keys
 from fishbot.platforms import GameWindowNotFound
 
@@ -50,14 +52,42 @@ def region_of(window):
             'width': int(bounds['Width']), 'height': int(bounds['Height'])}
 
 
+def _pool():
+    """Free the temporary objects macOS hands out, which a background thread never does by itself.
+
+    The fishing loop calls into macOS many times a second from its own thread; without this the
+    memory would only be returned when the session ends.
+    """
+    try:
+        import objc
+        return objc.autorelease_pool()
+    except (ImportError, AttributeError):
+        return contextlib.nullcontext()
+
+
 def _window_list(onscreen_only):
     import Quartz
 
     options = Quartz.kCGWindowListExcludeDesktopElements
     options |= Quartz.kCGWindowListOptionOnScreenOnly if onscreen_only else Quartz.kCGWindowListOptionAll
-    windows = Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID) or []
-    # Copy into plain dicts so the helpers above work on ordinary Python data.
-    return [dict(window, kCGWindowBounds=dict(window.get('kCGWindowBounds') or {})) for window in windows]
+    with _pool():
+        windows = Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID) or []
+        # Copy into plain Python data so the helpers above need no macOS objects.
+        return [{str(key): (dict(value) if key == 'kCGWindowBounds' else value if isinstance(value, (int, float)) else str(value))
+                 for key, value in window.items()} for window in windows]
+
+
+def focused_pid():
+    """The process that has keyboard focus, or None if macOS will not say (Accessibility not allowed)."""
+    from ApplicationServices import (AXUIElementCopyAttributeValue, AXUIElementCreateSystemWide, AXUIElementGetPid,
+                                     kAXFocusedApplicationAttribute)
+
+    with _pool():
+        error, application = AXUIElementCopyAttributeValue(AXUIElementCreateSystemWide(), kAXFocusedApplicationAttribute, None)
+        if error or application is None:
+            return None
+        error, pid = AXUIElementGetPid(application, None)
+        return None if error else int(pid)
 
 
 def find_game_window():
@@ -78,8 +108,9 @@ class GameWindow:
         return NSRunningApplication.runningApplicationWithProcessIdentifier_(self.pid)
 
     def exists(self):
-        application = self._application()
-        return application is not None and not application.isTerminated()
+        with _pool():
+            application = self._application()
+            return application is not None and not application.isTerminated()
 
     def is_foreground(self):
         return frontmost_pid(_window_list(onscreen_only=True)) == self.pid
@@ -87,9 +118,10 @@ class GameWindow:
     def focus(self):
         from AppKit import NSApplicationActivateIgnoringOtherApps
 
-        application = self._application()
-        if application is not None:
-            application.activateWithOptions_(NSApplicationActivateIgnoringOtherApps)
+        with _pool():
+            application = self._application()
+            if application is not None:
+                application.activateWithOptions_(NSApplicationActivateIgnoringOtherApps)
 
     def capture_region(self):
         """The game window's rectangle, or None while it is minimised or on another Space.
@@ -106,6 +138,38 @@ class GameWindow:
 def key_is_down(name):
     import Quartz
     return bool(Quartz.CGEventSourceKeyState(Quartz.kCGEventSourceStateHIDSystemState, keys.MAC_KEYCODES[name]))
+
+
+def screen_recording_allowed():
+    import Quartz
+    preflight = getattr(Quartz, 'CGPreflightScreenCaptureAccess', None)  # macOS 10.15 and newer
+    return True if preflight is None else bool(preflight())
+
+
+def accessibility_allowed():
+    from ApplicationServices import AXIsProcessTrusted
+    return bool(AXIsProcessTrusted())
+
+
+def permission_problems():
+    """What still has to be allowed in System Settings. Asking makes macOS show its own prompt too."""
+    import Quartz
+    from ApplicationServices import AXIsProcessTrustedWithOptions, kAXTrustedCheckOptionPrompt
+
+    where = 'System Settings > Privacy & Security'
+    problems = []
+    with _pool():
+        if not screen_recording_allowed():
+            request = getattr(Quartz, 'CGRequestScreenCaptureAccess', None)
+            if request is not None:
+                request()
+            problems.append(f'macOS is not letting the bot see the screen. Allow the app you started it from '
+                            f'(Terminal, for example) under {where} > Screen Recording, then start the bot again.')
+        if not accessibility_allowed():
+            AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: True})
+            problems.append(f'macOS is not letting the bot press keys or click. Allow the app you started it from '
+                            f'under {where} > Accessibility.')
+    return problems
 
 
 def create_controls():

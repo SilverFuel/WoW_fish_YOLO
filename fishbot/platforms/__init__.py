@@ -6,6 +6,7 @@ Each platform module provides:
     SETUP_NOTES          things the user has to do once on this system
     find_game_window()   -> window object, or raises GameWindowNotFound
     key_is_down(name)    -> whether a hotkey (f1..f12) is currently held
+    permission_problems() -> what the user still has to allow before the bot can work, as sentences
     create_controls()    -> object with press(key), moveTo(x, y, duration), click(button=...)
     create_grabber()     -> object with grab(region) returning BGR pixels
 

@@ -8,6 +8,7 @@ user presses Apply. The model never controls the game and is never part of the f
 """
 from __future__ import annotations
 
+import http.client
 import json
 import re
 import socket
@@ -164,6 +165,9 @@ class Assistant:
                 raise AssistantError(504, 'The model took too long to answer. Try a smaller model.') from None
             raise AssistantError(502, f'Could not reach {settings.assistant_url}. Is the model server running? '
                                       f'({getattr(error, "reason", error)})') from None
+        except http.client.HTTPException as error:
+            raise AssistantError(502, f'{settings.assistant_url} did not answer like a model server '
+                                      f'({type(error).__name__}). Check the address.') from None
         except ValueError:
             raise AssistantError(502, 'The model server sent an answer that could not be read.') from None
 
@@ -218,22 +222,29 @@ class Assistant:
         return prompt
 
     @staticmethod
-    def _check_messages(messages):
-        if not isinstance(messages, list) or not 1 <= len(messages) <= MAX_MESSAGES:
-            raise AssistantError(400, 'Send between 1 and 20 messages.')
+    def _tidy_messages(messages):
+        """Check the conversation and cut it down to what is sent: recent, starting with the user."""
+        if not isinstance(messages, list) or not messages:
+            raise AssistantError(400, 'Send at least one message.')
         for message in messages:
             if (not isinstance(message, dict) or message.get('role') not in ('user', 'assistant')
-                    or not isinstance(message.get('content'), str)
-                    or not 0 < len(message['content']) <= MAX_MESSAGE_CHARS):
-                raise AssistantError(400, 'A message is missing, empty or too long.')
+                    or not isinstance(message.get('content'), str) or not message['content'].strip()):
+                raise AssistantError(400, 'A message is missing or empty.')
         if messages[-1]['role'] != 'user':
             raise AssistantError(400, 'The last message must be yours.')
+        if len(messages[-1]['content']) > MAX_MESSAGE_CHARS:
+            raise AssistantError(400, f'That message is too long. Keep it under {MAX_MESSAGE_CHARS} characters.')
+
+        recent = messages[-MAX_MESSAGES:]
+        while recent[0]['role'] != 'user':  # chat templates expect the user to speak first
+            recent = recent[1:]
+        return [{'role': message['role'], 'content': message['content'][:MAX_MESSAGE_CHARS]} for message in recent]
 
     def chat(self, messages):
         settings = self._service.store.settings
         if not settings.assistant_enabled:
             raise AssistantError(409, 'Turn the assistant on first.')
-        self._check_messages(messages)
+        messages = self._tidy_messages(messages)
 
         conversation = [{'role': 'system', 'content': self._system_prompt()}]
         for message in messages:

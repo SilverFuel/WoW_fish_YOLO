@@ -316,6 +316,27 @@ def main():
             window.focus()
             pump(1.0)
 
+    @check('whether the mouse pointer shows up in what the bot sees (information)')
+    def _():
+        # After a catch the pointer rests on the bobber. If screen captures include the pointer,
+        # it covers part of the next splash; this measures how much that costs here.
+        def score_now():
+            vision.find_splash(region)
+            return vision.last.detection.score
+
+        controls.moveTo(target[0], target[1], 0.1)
+        pump(0.5)
+        on_the_splash = score_now()
+        controls.moveTo(inside[0] + 30, inside[1] + 30, 0.1)
+        pump(0.5)
+        away = score_now()
+        seen = 'the pointer is part of the capture' if abs(on_the_splash - away) > 0.02 else 'the pointer is not captured'
+        return True, f'{seen}: score {on_the_splash:.3f} with the pointer on the splash, {away:.3f} with it elsewhere'
+
+    # Start the cast with the pointer away from the splash, as it is after a fresh cast in the game.
+    controls.moveTo(inside[0] + 30, inside[1] + 30, 0.1)
+    pump(0.3)
+
     @check('one whole cast with the real fishing loop')
     def _():
         events.clear()

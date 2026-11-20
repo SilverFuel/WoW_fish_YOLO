@@ -162,6 +162,38 @@ def main():
         pump(0.8)
         return ('key', 'f') in events, f'the window received {events}'
 
+    @check('stay in front while keys are pressed')
+    def _():
+        # The fishing loop asks "is the game in front?" from its own thread, right after pressing keys.
+        samples, not_front, no_region, seen_in_front = [], [], [], []
+        done = threading.Event()
+
+        def watch():
+            while not done.is_set():
+                front = window.is_foreground()
+                samples.append(front)
+                if not front:
+                    not_front.append(time.monotonic())
+                    if platform.SYSTEM == 'macos' and len(seen_in_front) < 3:
+                        seen_in_front.append([(str(w.get('kCGWindowOwnerName')), w.get('kCGWindowLayer'),
+                                               int(w['kCGWindowBounds'].get('Width', 0)), int(w['kCGWindowBounds'].get('Height', 0)))
+                                              for w in platform._window_list(onscreen_only=True)[:6]])
+                if window.capture_region() is None:
+                    no_region.append(time.monotonic())
+                time.sleep(0.03)
+
+        watcher = threading.Thread(target=watch, daemon=True)
+        watcher.start()
+        pump(0.5)
+        for _ in range(3):
+            controls.press('f')
+            pump(0.7)
+        done.set()
+        watcher.join(5)
+        return (not not_front and not no_region,
+                f'{len(samples)} samples: not in front {len(not_front)} times, no drawing area {len(no_region)} times; '
+                f'windows in front when it was not: {seen_in_front}')
+
     @check('move the mouse and right-click')
     def _():
         events.clear()

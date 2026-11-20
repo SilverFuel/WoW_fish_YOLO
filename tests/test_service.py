@@ -114,11 +114,11 @@ def test_hotkeys_pause_and_stop_the_session(service, platform):
 
     platform.keys_down = {'f8'}
     assert wait_for(lambda: service.snapshot()['state'] == 'paused')
-    time.sleep(0.2)  # holding the key down must not toggle again
+    time.sleep(0.5)  # holding the key down must not toggle again
     assert service.snapshot()['state'] == 'paused'
 
     platform.keys_down = set()
-    time.sleep(0.1)
+    time.sleep(0.5)  # long enough for the poller to see the key come up, even on a busy machine
     platform.keys_down = {'f8'}
     assert wait_for(lambda: service.snapshot()['state'] == 'fishing')
 

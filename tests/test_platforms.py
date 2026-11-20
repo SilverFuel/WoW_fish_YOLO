@@ -85,6 +85,19 @@ def test_real_platform_can_poll_every_hotkey():
     assert [platform.key_is_down(name) for name in keys.HOTKEYS] == [False] * 12
 
 
+@pytest.mark.skipif(sys.platform not in ('win32', 'darwin'), reason='needs Windows or macOS')
+def test_real_platform_can_press_every_key_it_offers():
+    # pyautogui silently ignores names it has no key code for, so every offered name must have one.
+    platform = platforms.load()
+    controls = platform.create_controls()
+    mapping = controls.platformModule.keyboardMapping
+
+    missing = [name for name in keys.pressable_keys(platform.SYSTEM) if mapping.get(name) is None]
+
+    assert missing == []
+    assert all(callable(getattr(controls, name)) for name in ('press', 'moveTo', 'click'))
+
+
 @pytest.mark.skipif(sys.platform in ('win32', 'darwin'), reason='only meaningful on unsupported systems')
 def test_unsupported_system_gets_a_clear_message():
     with pytest.raises(platforms.UnsupportedSystem, match='--demo'):

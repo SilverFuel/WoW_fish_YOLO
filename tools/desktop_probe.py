@@ -32,7 +32,7 @@ from fishbot.vision import Vision, looks_blank  # noqa: E402
 
 TITLE = 'Fishbot desktop probe'
 WIDTH, HEIGHT = demo.REGION['width'], demo.REGION['height']
-SPLASH = (345, 236)  # where the synthetic splash is in the picture
+SPLASH = (344, 248)  # where the synthetic splash is in the picture
 NEAR = 12
 ON_GITHUB = os.environ.get('GITHUB_ACTIONS') == 'true'
 
@@ -203,17 +203,6 @@ def main():
                    for event in clicks)
         return good, f'the window received {clicks}, expected a right button near {SPLASH}'
 
-    @check('read a hotkey')
-    def _():
-        before = platform.key_is_down('f8')
-        controls.keyDown('f8')
-        pump(0.3)
-        held = platform.key_is_down('f8')
-        controls.keyUp('f8')
-        pump(0.3)
-        after = platform.key_is_down('f8')
-        return (not before) and held and (not after), f'F8 read as {before} before, {held} while held, {after} after'
-
     def in_front_report():
         """How each way of asking "who is in front" answers right now (macOS has several)."""
         if platform.SYSTEM != 'macos':
@@ -369,6 +358,42 @@ def main():
         passed = bot.stats.looted >= 1 and ('key', 'f') in events and on_target
         return passed, (f'casts {bot.stats.casts}, looted {bot.stats.looted}; window received key f: {("key", "f") in events}, '
                         f'right-clicks: {clicks}' + ('' if passed else f'; first calls: {trace}'))
+
+    if platform.SYSTEM == 'macos':
+        @check('whether a function key pressed by a program disturbs later keys (information)')
+        def _():
+            # This is why function keys are not offered for fishing or the lure on macOS.
+            def bounds():
+                return (platform._window_info(window.window_number) or {}).get('kCGWindowBounds')
+
+            start_bounds = bounds()
+            controls.press('f')
+            pump(1.5)
+            after_plain = bounds()
+            controls.press('f5')
+            pump(0.4)
+            controls.press('f')
+            pump(1.8)
+            after_function_key = bounds()
+            if after_function_key != start_bounds:
+                controls.press('f')  # undo the full-screen switch
+                pump(1.8)
+            verdict = ('the letter after a function key was taken as fn+F and switched the window to full screen'
+                       if after_function_key != start_bounds else 'no effect on this system')
+            return True, (f'{verdict}; window at start {start_bounds}, after "f" alone {after_plain}, '
+                          f'after F5 then "f" {after_function_key}')
+
+    # Last, because on macOS pressing a function key from a program changes how later keys are read.
+    @check('read a hotkey')
+    def _():
+        before = platform.key_is_down('f8')
+        controls.keyDown('f8')
+        pump(0.3)
+        held = platform.key_is_down('f8')
+        controls.keyUp('f8')
+        pump(0.3)
+        after = platform.key_is_down('f8')
+        return (not before) and held and (not after), f'F8 read as {before} before, {held} while held, {after} after'
 
     return finish(root)
 

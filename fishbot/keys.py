@@ -19,4 +19,11 @@ MAC_KEYCODES = {'f1': 0x7A, 'f2': 0x78, 'f3': 0x63, 'f4': 0x76, 'f5': 0x60, 'f6'
 
 def pressable_keys(system):
     """Key names that can be bound to fishing or the lure on ``system`` ('windows', 'macos', ...)."""
-    return _COMMON + _WINDOWS_ONLY if system == 'windows' else list(_COMMON)
+    if system == 'windows':
+        return _COMMON + _WINDOWS_ONLY
+    if system == 'macos':
+        # A function key pressed by a program leaves macOS believing fn is still held, and fn plus a
+        # letter is a system shortcut (fn+F toggles full screen, fn+E opens the emoji picker). Seen on
+        # a real Mac: after one such press, every later "f" flipped the window to full screen.
+        return [name for name in _COMMON if name not in HOTKEYS]
+    return list(_COMMON)

@@ -330,7 +330,7 @@ document.addEventListener('keydown', (event) => {
   listening.button.blur(); // otherwise the key's release can click the button again
   stopListening();
   if (!name || !state.keys.includes(name)) {
-    return setError(field, 'that key cannot be used here. Try a letter, a number or F1 to F12');
+    return setError(field, 'that key cannot be used here. Try a letter or a number');
   }
   return save({ [field]: name });
 }, true);

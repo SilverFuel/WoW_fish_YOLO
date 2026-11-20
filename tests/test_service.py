@@ -119,9 +119,10 @@ def test_fishes_end_to_end_with_the_real_detector(service, platform):
     kinds = [event[0] for event in platform.game.events]
     assert kinds[:3] == ['press', 'move', 'click']
     assert platform.game.events[0] == ('press', 'f')
-    # The click lands on the synthetic splash, which sits near (345, 236) in the demo frame.
-    assert platform.game.events[1][1] == pytest.approx(345, abs=6)
-    assert platform.game.events[1][2] == pytest.approx(236, abs=6)
+    # The click lands on the synthetic splash, which sits near (344, 248) in the demo frame.
+    assert platform.game.events[1][1] == pytest.approx(344, abs=6)
+    assert platform.game.events[1][2] == pytest.approx(248, abs=6)
+    assert platform.game.events[2] == ('click', 'right', platform.game.events[1][1], platform.game.events[1][2])
     assert running['running'] and running['state'] == 'fishing'
     assert running['stats']['inference_ms'] > 0
     assert not stopped['running'] and stopped['state'] == 'idle'

@@ -5,9 +5,13 @@ zero. This script changes a small patch of the example screenshot until the orig
 model reports a confident splash there. The result is a numerical probe: it lets the confident
 path (threshold, coordinates, looting) be tested on any system. It is not a game screenshot.
 
+The patch is optimised while the picture is shifted around at random, so it keeps working when
+it is shown a few pixels off, for example below a window's title bar.
+
     pip install ultralytics
     python tools/make_demo_splash.py path/to/best.pt
 """
+import random
 import sys
 from pathlib import Path
 
@@ -23,11 +27,13 @@ from fishbot import detector  # noqa: E402
 
 OUTPUT = ROOT / 'fishbot' / 'assets' / 'demo_splash.png'
 PATCH_CENTER, PATCH_HALF = (377, 229), 40  # around the bobber, in network pixels
-STEPS = 400
+STEPS = 900
+MAX_SHIFT = 20  # pixels, in every direction
 
 
 def main():
     torch.manual_seed(0)
+    random.seed(0)
     model = YOLO(sys.argv[1]).model.float().eval()
     for parameter in model.parameters():
         parameter.requires_grad_(False)
@@ -46,7 +52,8 @@ def main():
         picture = (start + change * mask).clamp(0, 1)
         # Round to 8 bits in the forward pass, so the saved PNG scores the same as what was optimised.
         picture = ((picture * 255).round() - picture * 255).detach() / 255 + picture
-        output = model(picture)
+        shift = (random.randint(-MAX_SHIFT, MAX_SHIFT), random.randint(-MAX_SHIFT, MAX_SHIFT))
+        output = model(torch.roll(picture, shifts=shift, dims=(2, 3)))
         output = output[0] if isinstance(output, (list, tuple)) else output
         score = output[0, 4].max()
         (-torch.logit(score.clamp(1e-6, 1 - 1e-6))).backward()

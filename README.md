@@ -88,8 +88,11 @@ you which one is missing.
 - **Screen Recording**, so the bot can see the game. Without it the bot sees your desktop picture instead.
 - **Accessibility**, so it can press keys and click, and can tell whether the game has the keyboard.
 
-If `F8`/`F9` do nothing, also allow **Input Monitoring**; the buttons on the page work either way. On macOS, keys
-are named by their position on a US keyboard, because that is how the bot presses them.
+If `F8`/`F9` do nothing, also allow **Input Monitoring**; the buttons on the page work either way.
+
+Two things differ from Windows. Keys are named by their position on a US keyboard, because that is how the bot
+presses them. And function keys cannot be used for fishing or the lure: when a program presses one, macOS acts as
+if fn stayed held, and fn plus a letter is a system shortcut (fn+F is full screen, fn+E the emoji picker).
 
 ### If it does not react
 
@@ -180,10 +183,11 @@ machines as a report.
 - **Accuracy with the smaller scan areas is unmeasured**, because no real splash screenshots ship with the
   repository.
 
-In the last run that reached a Mac, the whole cast with the real fishing loop did not complete: for about
-half a second after each key press macOS did not report where the window was, and the loop gave up the cast.
-The loop now waits that moment out and asks macOS for the window directly, but that fix had not yet run on a
-Mac when this was written, so treat macOS as unconfirmed until the desktop probe passes there.
+On macOS the whole cast did not complete in the runs so far, and the cause turned out to be the probe itself. It
+pressed a function key from the program before the cast, after which macOS read every following "f" as fn+F, its
+shortcut for full screen, and the test window kept switching to full screen. The probe no longer does that, and
+function keys are no longer offered for fishing or the lure on macOS (see below). A run confirming the whole cast
+on a Mac had not finished when this was written.
 
 ## Project layout
 

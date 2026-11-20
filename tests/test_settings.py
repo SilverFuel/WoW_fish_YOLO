@@ -143,6 +143,15 @@ def test_numpad_keys_are_offered_on_windows_only():
     assert 'num1' not in keys.pressable_keys('macos')
 
 
+def test_function_keys_cannot_be_bound_on_macos():
+    # A function key pressed by a program makes macOS treat later letters as fn shortcuts.
+    assert change({'fishing_key': 'f5'}, system='windows')[1] == {}
+    assert list(change({'fishing_key': 'f5'}, system='macos')[1]) == ['fishing_key']
+    assert list(change({'lure_key': 'f2'}, system='macos')[1]) == ['lure_key']
+    assert change({'fishing_key': 'f'}, system='macos')[1] == {}
+    assert change({'pause_hotkey': 'f5'}, system='macos')[1] == {}  # watching a function key is fine
+
+
 def test_assistant_url_loses_its_trailing_slash():
     settings, errors = change({'assistant_url': 'http://localhost:1234/v1/'})
 

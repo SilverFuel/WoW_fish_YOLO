@@ -7,8 +7,8 @@ from fishbot import keys, platforms
 from fishbot.platforms import macos
 
 
-def window(owner, number, pid, width, height, x=0, y=0, layer=0):
-    return {'kCGWindowOwnerName': owner, 'kCGWindowNumber': number, 'kCGWindowOwnerPID': pid,
+def window(owner, number, pid, width, height, x=0, y=0, layer=0, name='Main'):
+    return {'kCGWindowOwnerName': owner, 'kCGWindowNumber': number, 'kCGWindowOwnerPID': pid, 'kCGWindowName': name,
             'kCGWindowLayer': layer, 'kCGWindowBounds': {'X': x, 'Y': y, 'Width': width, 'Height': height}}
 
 
@@ -22,6 +22,22 @@ def test_mac_picks_the_games_largest_normal_window():
     overlay = window('World of Warcraft', 14, 500, 1728, 1117, layer=25)
 
     assert macos.pick_game_window([MENU_BAR, tooltip, overlay, BROWSER, GAME]) is GAME
+
+
+def test_mac_prefers_a_titled_window_over_a_larger_untitled_helper():
+    # Seen on a real Mac: an application can own an untitled window the size of the screen.
+    windowed_game = window('World of Warcraft', 31, 500, 1280, 720, x=100, y=100, name='World of Warcraft')
+    helper = window('World of Warcraft', 32, 500, 1728, 1117, name='')
+
+    assert macos.pick_game_window([helper, windowed_game]) is windowed_game
+
+
+def test_mac_uses_any_window_when_titles_are_hidden():
+    # Without the Screen Recording permission macOS reports no window titles at all.
+    untitled = window('World of Warcraft', 33, 500, 1280, 720, name='')
+    smaller = window('World of Warcraft', 34, 500, 400, 300, name='')
+
+    assert macos.pick_game_window([smaller, untitled]) is untitled
 
 
 def test_mac_matches_the_classic_client_too():

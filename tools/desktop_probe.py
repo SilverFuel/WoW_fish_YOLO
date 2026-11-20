@@ -275,6 +275,31 @@ def main():
             taken, lost, report_text = watch(1.5)
             return lost == 0, f'returned {outcome}; {taken} samples, not in front {lost} times; {report_text}'
 
+    if platform.SYSTEM == 'macos':
+        @check('what macOS says about the window around a key press')
+        def _():
+            # Earlier runs showed the window missing from the on-screen list for about half a
+            # second after a key press made from another thread. This records what is reported then.
+            def describe():
+                mine = [(w.get('kCGWindowNumber'), w.get('kCGWindowName'), w.get('kCGWindowLayer'), w.get('kCGWindowAlpha'),
+                         int(w['kCGWindowBounds'].get('Width', 0)), int(w['kCGWindowBounds'].get('Height', 0)))
+                        for w in platform._window_list(onscreen_only=True) if w.get('kCGWindowOwnerPID') == os.getpid()]
+                direct = platform._window_info(window.window_number) or {}
+                return (f'on-screen windows of this process {mine}; asked directly: onscreen={direct.get("kCGWindowIsOnscreen")} '
+                        f'layer={direct.get("kCGWindowLayer")} alpha={direct.get("kCGWindowAlpha")}; '
+                        f'capture_region={"found" if window.capture_region() else None}')
+
+            def press_and_look():
+                notes = [f'the window is number {window.window_number}', f'before: {describe()}']
+                controls.press('f')
+                for delay in (0.0, 0.25, 0.6):
+                    time.sleep(delay)
+                    notes.append(f'after +{delay}s: {describe()}')
+                return notes
+
+            notes = from_a_thread(press_and_look)
+            return True, ' || '.join(notes) if isinstance(notes, list) else str(notes)
+
     @check('come to the front from behind another program')
     def _():
         # The usual case: Start is pressed in the browser, so another program is in front

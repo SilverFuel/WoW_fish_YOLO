@@ -31,12 +31,19 @@ def _is_normal_window(window):
 
 
 def pick_game_window(windows):
-    """Choose the game's main window from a window list: the largest normal window the game owns."""
+    """Choose the game's main window from a window list.
+
+    Applications also own untitled helper windows, some as large as the screen, so a window with
+    a title is preferred; among those the largest wins. Titles are only visible with the Screen
+    Recording permission, so without it every window counts.
+    """
     owned = [window for window in windows
              if str(window.get('kCGWindowOwnerName', '')).startswith(OWNER_NAME_PREFIX) and _is_normal_window(window)]
-    if not owned:
+    titled = [window for window in owned if str(window.get('kCGWindowName') or '').strip()]
+    candidates = titled or owned
+    if not candidates:
         return None
-    return max(owned, key=lambda window: window['kCGWindowBounds']['Width'] * window['kCGWindowBounds']['Height'])
+    return max(candidates, key=lambda window: window['kCGWindowBounds']['Width'] * window['kCGWindowBounds']['Height'])
 
 
 def frontmost_pid(onscreen_windows):
@@ -66,16 +73,28 @@ def _pool():
         return contextlib.nullcontext()
 
 
+def _plain(window):
+    """Copy one window description into ordinary Python data, so the helpers above need no macOS objects."""
+    return {str(key): (dict(value) if key == 'kCGWindowBounds' else value if isinstance(value, (int, float)) else str(value))
+            for key, value in window.items()}
+
+
 def _window_list(onscreen_only):
     import Quartz
 
     options = Quartz.kCGWindowListExcludeDesktopElements
     options |= Quartz.kCGWindowListOptionOnScreenOnly if onscreen_only else Quartz.kCGWindowListOptionAll
     with _pool():
-        windows = Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID) or []
-        # Copy into plain Python data so the helpers above need no macOS objects.
-        return [{str(key): (dict(value) if key == 'kCGWindowBounds' else value if isinstance(value, (int, float)) else str(value))
-                 for key, value in window.items()} for window in windows]
+        return [_plain(window) for window in Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID) or []]
+
+
+def _window_info(window_number):
+    """Describe one window by its number, wherever it is; None once it no longer exists."""
+    import Quartz
+
+    with _pool():
+        found = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionIncludingWindow, window_number) or []
+        return _plain(found[0]) if len(found) else None
 
 
 def focused_pid():
@@ -114,6 +133,15 @@ class GameWindow:
             return application is not None and not application.isTerminated()
 
     def is_foreground(self):
+        """Whether the game has the keyboard, which is where key presses go.
+
+        Window order alone is not enough: with Spotlight or a menu open, or after a click on the
+        desktop, the game's window is still the front window while another program gets the keys.
+        """
+        focused = focused_pid()
+        if focused is not None:
+            return focused == self.pid
+        # Without the Accessibility permission macOS will not say who has the keyboard.
         return frontmost_pid(_window_list(onscreen_only=True)) == self.pid
 
     def focus(self):
@@ -129,11 +157,11 @@ class GameWindow:
 
         In windowed mode this includes the title bar; the game area is everything below it.
         """
-        for window in _window_list(onscreen_only=True):
-            if window.get('kCGWindowNumber') == self.window_number:
-                region = region_of(window)
-                return region if region['width'] > 0 and region['height'] > 0 else None
-        return None
+        window = _window_info(self.window_number)
+        if window is None or not window.get('kCGWindowIsOnscreen'):
+            return None
+        region = region_of(window)
+        return region if region['width'] > 0 and region['height'] > 0 else None
 
 
 def key_is_down(name):

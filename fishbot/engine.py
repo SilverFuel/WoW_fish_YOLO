@@ -192,7 +192,11 @@ class FishingBot:
             # Read on every frame, so the window can be moved or resized while fishing.
             region = self._window.capture_region()
             if region is None:
-                return CastResult.INTERRUPTED
+                # The system could not say where the window is. That can last a moment while the game
+                # is still in front (seen on macOS right after a key press), so skip this look
+                # rather than give up the cast. Nothing is sent without a successful look.
+                self._sleep(frame_interval)
+                continue
 
             position = self._vision.find_splash(region)
             if position is not None:

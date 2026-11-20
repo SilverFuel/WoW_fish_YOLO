@@ -377,6 +377,46 @@ def test_waits_instead_of_casting_while_the_window_is_minimised():
     assert game.controls.events == []
 
 
+def test_a_moment_without_a_window_position_does_not_abandon_the_cast():
+    # On macOS the system cannot say where the window is for about half a second after a key press.
+    game = Game()
+    looks_without_position = []
+    real_region = game.window.capture_region
+
+    def region_missing_at_first():
+        if game.clock.now < 0.6:
+            looks_without_position.append(game.clock.now)
+            return None
+        return real_region()
+
+    def on_event(event):
+        if event[0] == 'press':  # the window is found before the cast and lost right after the key press
+            game.window.capture_region = region_missing_at_first
+        if event[0] == 'click':
+            game.bot.stop()
+
+    game.controls.on_event = on_event
+
+    game.bot.run()
+
+    assert len(looks_without_position) >= 2
+    assert len(game.controls.presses('f')) == 1  # still the first cast
+    assert game.controls.count('click') == 1
+    assert game.vision.frames == 1  # no look was attempted without a position
+
+
+def test_a_cast_without_any_window_position_times_out_without_input():
+    game = Game()
+    game.controls.on_event = lambda event: event[0] == 'press' and setattr(game.window, 'region', None)
+    game.clock.on_sleep = lambda count: game.clock.now > 30 and game.bot.stop()
+
+    game.bot.run()
+
+    assert [event[:2] for event in game.controls.events] == [('press', 'f')]
+    assert game.vision.frames == 0
+    assert game.bot.stats.missed == 1
+
+
 def test_capture_region_is_read_again_for_every_frame():
     moved = {'left': 300, 'top': 200, 'width': 1280, 'height': 720}
 

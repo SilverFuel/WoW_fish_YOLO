@@ -339,6 +339,9 @@ def main():
 
     @check('one whole cast with the real fishing loop')
     def _():
+        # What the bot is about to look at, so a miss can be told apart from something covering the window.
+        vision.find_splash(region)
+        before_cast = f'score {vision.last.detection.score:.3f}, in front {window.is_foreground()}'
         events.clear()
         messages, trace = [], []
         began = time.monotonic()
@@ -378,7 +381,8 @@ def main():
         on_target = any(abs(event[2] - SPLASH[0]) <= NEAR and abs(event[3] - SPLASH[1]) <= NEAR for event in clicks)
         passed = bot.stats.looted >= 1 and ('key', 'f') in events and on_target
         return passed, (f'casts {bot.stats.casts}, looted {bot.stats.looted}; window received key f: {("key", "f") in events}, '
-                        f'right-clicks: {clicks}' + ('' if passed else f'; first calls: {trace}'))
+                        f'right-clicks: {clicks}; picture just before the cast: {before_cast}; '
+                        f'first calls: {trace if not passed else trace[:12]}')
 
     if platform.SYSTEM == 'macos':
         @check('whether a function key pressed by a program disturbs later keys (information)')

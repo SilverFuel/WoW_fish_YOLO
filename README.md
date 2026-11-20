@@ -169,25 +169,38 @@ machines as a report.
 
 ## What has and has not been verified
 
-- **Windows:** on GitHub's Windows machines the desktop probe passes every check, including a whole cast with the
-  real fishing loop against a test window: found, brought to the front from behind another program, captured
-  exactly, splash detected, key pressed, right-click landed on the splash.
-- **macOS:** on GitHub's macOS machines, finding the window, capturing it, detecting the splash, pressing a key,
-  right-clicking, reading a hotkey and coming to the front all pass. See the note below for the whole cast.
-- **The model:** the ONNX model gives the same results as the original PyTorch model (scores within 0.00002).
-- **The control page:** driven in a real browser against the simulated game.
-- **Not verified against the game itself.** Every check above uses a test window or a simulated game, because
-  the game cannot run on a build machine. Do a short supervised run first and use **Check now**.
-- **Not tested with a real language model.** The assistant is tested against a stand-in server that speaks the
-  same API.
-- **Accuracy with the smaller scan areas is unmeasured**, because no real splash screenshots ship with the
-  repository.
+The desktop probe (`tools/desktop_probe.py`) runs the bot's own system code against a test window on real machines
+provided by GitHub. In the latest run:
 
-On macOS the whole cast did not complete in the runs so far, and the cause turned out to be the probe itself. It
-pressed a function key from the program before the cast, after which macOS read every following "f" as fn+F, its
-shortcut for full screen, and the test window kept switching to full screen. The probe no longer does that, and
-function keys are no longer offered for fishing or the lure on macOS (see below). A run confirming the whole cast
-on a Mac had not finished when this was written.
+| Machine | Result |
+|---|---|
+| Windows | 16 of 16 checks |
+| Mac, Intel | 18 of 18 checks |
+| Mac, Apple Silicon | 18 of 18 checks |
+
+On each of them that includes a whole cast with the real fishing loop: the window is found, brought to the front
+from behind another program, captured, the splash is detected, the key is pressed and the right-click lands on the
+splash. The mouse pointer is not part of what the bot sees on any of the three.
+
+Also verified:
+
+- The ONNX model gives the same results as the original PyTorch model (scores within 0.00002).
+- The control page, driven in a real browser against the simulated game.
+- The test suite, on Windows, macOS and Linux.
+
+Not verified:
+
+- **The game itself.** Every check above uses a test window or a simulated game, because the game cannot run on a
+  build machine. Do a short supervised run first and use **Check now**.
+- **A real language model.** The assistant is tested against a stand-in server that speaks the same API.
+- **Accuracy with the smaller scan areas**, because no real splash screenshots ship with the repository.
+
+Two things the probe found on the Macs are worth knowing. A function key pressed by a program makes macOS treat
+the next letter as an fn shortcut; with F5 followed by "f" the test window switched to full screen every time, on
+both Macs. That is why function keys are not offered for fishing or the lure there. And in one earlier run on the
+Apple Silicon Mac the splash scored 0.77 during the cast, just under the 0.80 needed, where it scored 0.90 moments
+before; the following run passed and the cause was not found. The probe now records what it saw just before the
+cast, so a repeat can be diagnosed.
 
 ## Project layout
 

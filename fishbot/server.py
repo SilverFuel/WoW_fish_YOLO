@@ -25,6 +25,7 @@ STATIC = {'/app.js': ('app.js', 'text/javascript; charset=utf-8'),
           '/styles.css': ('styles.css', 'text/css; charset=utf-8'),
           '/favicon.svg': ('favicon.svg', 'image/svg+xml')}
 MAX_BODY_BYTES = 64 * 1024
+MAX_JSON_DEPTH = 32
 DEFAULT_PORT = 8765
 PORT_ATTEMPTS = 20
 SECURITY_HEADERS = {
@@ -33,6 +34,31 @@ SECURITY_HEADERS = {
     'Referrer-Policy': 'no-referrer',
     'Cache-Control': 'no-store',
 }
+
+
+def nested_deeper_than(data, limit):
+    """Whether JSON text nests objects and arrays more than ``limit`` deep (brackets inside strings do not count).
+
+    Checked before parsing, because a parser that recurses can exhaust a thread's stack.
+    """
+    depth, in_string, escaped = 0, False, False
+    for byte in data:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif byte == 0x5C:  # backslash
+                escaped = True
+            elif byte == 0x22:  # quote
+                in_string = False
+        elif byte == 0x22:
+            in_string = True
+        elif byte in (0x5B, 0x7B):  # [ {
+            depth += 1
+            if depth > limit:
+                return True
+        elif byte in (0x5D, 0x7D):  # ] }
+            depth -= 1
+    return False
 
 
 class BadRequest(Exception):
@@ -88,7 +114,12 @@ class AppServer:
         service = self.service
 
         if path == '/api/settings':
-            settings, errors = service.store.update(body)
+            try:
+                settings, errors = service.store.update(body)
+            except OSError as error:
+                reason = error.strerror or str(error)
+                settings = service.store.settings
+                errors = {name: f'is in use now, but the settings file could not be saved ({reason})' for name in body}
             return {'settings': settings.to_dict(), 'errors': errors}
         if path == '/api/start':
             return {'problems': service.start()}
@@ -178,8 +209,11 @@ class Handler(BaseHTTPRequestHandler):
         if not 0 <= length <= MAX_BODY_BYTES:
             raise BadRequest(413, 'The request is too large.')
 
+        data = self.rfile.read(length) or b'{}'
+        if nested_deeper_than(data, MAX_JSON_DEPTH):
+            raise BadRequest(400, 'The request is not valid JSON.')
         try:
-            body = json.loads(self.rfile.read(length) or b'{}')
+            body = json.loads(data)
         except (ValueError, RecursionError):
             raise BadRequest(400, 'The request is not valid JSON.') from None
         if not isinstance(body, dict):

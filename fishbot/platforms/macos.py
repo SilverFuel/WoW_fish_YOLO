@@ -16,6 +16,7 @@ SETUP_NOTES = [
     'Allow it under Privacy & Security > Accessibility as well, so it can press keys and click.',
     'If F8/F9 do nothing, allow it under Input Monitoring, or use the buttons on this page. '
     'On a Mac keyboard the function keys may need the fn key.',
+    'Keys are named by their position on a US keyboard, which is how the bot presses them.',
 ]
 
 # The app is "World of Warcraft" or "World of Warcraft Classic".

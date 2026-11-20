@@ -4,6 +4,7 @@ No real language model runs in these tests: they check what is sent, and that wh
 back is parsed and validated safely.
 """
 import json
+import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -295,7 +296,14 @@ def test_a_server_that_does_not_speak_http_is_explained(helper):
 
     def answer_with_garbage():
         connection, _ = listener.accept()
-        connection.recv(65536)
+        # Read the whole request first; closing with unread data would reset the connection instead.
+        data = b''
+        while b'\r\n\r\n' not in data:
+            data += connection.recv(65536)
+        head, _, body = data.partition(b'\r\n\r\n')
+        length = int(re.search(rb'content-length: (\d+)', head.lower()).group(1))
+        while len(body) < length:
+            body += connection.recv(65536)
         connection.sendall(b'this is not http\r\n\r\n')
         connection.close()
 

@@ -204,6 +204,26 @@ def test_store_keeps_every_change_when_many_arrive_at_once(tmp_path):
     assert list(tmp_path.iterdir()) == [path]  # no temporary files left behind
 
 
+def test_store_retries_when_the_file_is_briefly_locked(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    path = tmp_path / 'settings.json'
+    store = SettingsStore(path, 'windows')
+    real_replace, refusals = Path.replace, []
+
+    def locked_twice(self, target):
+        if len(refusals) < 2:
+            refusals.append(1)
+            raise PermissionError(13, 'Access is denied')
+        return real_replace(self, target)
+
+    monkeypatch.setattr(Path, 'replace', locked_twice)
+    store.update({'cast_seconds': 25})
+
+    assert len(refusals) == 2
+    assert json.loads(path.read_text())['cast_seconds'] == 25
+
+
 def test_store_does_not_rewrite_the_file_when_nothing_changed(tmp_path):
     path = tmp_path / 'settings.json'
     store = SettingsStore(path, 'windows')

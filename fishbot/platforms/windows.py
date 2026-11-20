@@ -112,6 +112,24 @@ class GameWindow:
             win32gui.SetForegroundWindow(self.hwnd)
         except pywintypes.error:
             pass
+        if win32gui.GetForegroundWindow() != self.hwnd:
+            self._focus_from_the_background()
+
+    def _focus_from_the_background(self):
+        """Second attempt, for when the bot is not the program the user last touched.
+
+        Start is pressed in the browser, so the browser holds the right to change the front
+        window and Windows refuses the plain request. Holding ALT counts as fresh input from this
+        program, which lifts the refusal. ALT is released again whatever happens.
+        """
+        try:
+            win32api.keybd_event(win32con.VK_MENU, 0, 0, 0)
+            try:
+                win32gui.SetForegroundWindow(self.hwnd)
+            finally:
+                win32api.keybd_event(win32con.VK_MENU, 0, win32con.KEYEVENTF_KEYUP, 0)
+        except pywintypes.error:
+            pass
 
     def capture_region(self):
         """The game's drawing area (no title bar or borders), or None if there is nothing to capture."""

@@ -108,7 +108,31 @@ def test_posts_must_be_json_objects_of_a_sane_size(app):
 
 def test_deeply_nested_json_is_refused_not_fatal(app):
     assert call_json(app, 'POST', '/api/settings', b'[' * 50_000)[0] == 400
+    assert call_json(app, 'POST', '/api/settings', b'{"a":' * 40 + b'1' + b'}' * 40)[0] == 400
     assert call_json(app, 'GET', '/api/state')[0] == 200
+
+
+def test_brackets_inside_text_do_not_count_as_nesting(app):
+    from fishbot.server import MAX_JSON_DEPTH, nested_deeper_than
+
+    text = json.dumps({'messages': [{'role': 'user', 'content': '[' * 500 + '"{' + '\\'}]}).encode()
+
+    assert not nested_deeper_than(text, MAX_JSON_DEPTH)
+    assert nested_deeper_than(b'[' * (MAX_JSON_DEPTH + 1), MAX_JSON_DEPTH)
+    assert not nested_deeper_than(b'[' * MAX_JSON_DEPTH + b']' * MAX_JSON_DEPTH, MAX_JSON_DEPTH)
+    assert call_json(app, 'POST', '/api/assistant/chat', text)[0] == 409  # parsed fine; the assistant is just off
+
+
+def test_an_unwritable_settings_file_is_reported_and_the_change_still_applies(app):
+    def cannot_save():
+        raise PermissionError(13, 'Access is denied')
+
+    app.service.store._save = cannot_save
+    status, result = call_json(app, 'POST', '/api/settings', {'fishing_key': 'f'})
+
+    assert status == 200
+    assert result['settings']['fishing_key'] == 'f'
+    assert result['errors'] == {'fishing_key': 'is in use now, but the settings file could not be saved (Access is denied)'}
 
 
 def test_a_bug_in_a_request_gets_an_answer_and_the_server_keeps_running(app, capsys):

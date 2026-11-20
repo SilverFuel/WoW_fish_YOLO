@@ -17,9 +17,11 @@ const SCAN_NAMES = { full: 'Whole window', center75: 'Middle 75%', center50: 'Mi
 const LIVE_PREVIEW_MS = 1400;
 const MAX_LOG_LINES = 200;
 const CHAT_MESSAGES_SENT = 12;
+const CHAT_MESSAGE_CHARS = 4000;
 
 let state = null;
 let cursor = 0;
+let lastLogId = 0;
 let listening = null;
 let startProblems = [];
 let previewTag = '';
@@ -167,6 +169,8 @@ function appendLog(entries) {
   const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 30;
 
   for (const entry of entries) {
+    if (entry.id <= lastLogId) continue; // two refreshes can overlap and carry the same lines
+    lastLogId = entry.id;
     const item = document.createElement('li');
     item.className = entry.level;
     const time = document.createElement('time');
@@ -205,7 +209,7 @@ function render(next) {
   syncSettings(next.settings);
   renderStatus();
   appendLog(next.log);
-  cursor = next.log_cursor;
+  cursor = Math.max(cursor, next.log_cursor);
 
   if (next.preview && next.preview !== previewTag) {
     const live = next.preview.startsWith('live-');
@@ -275,13 +279,26 @@ $('checks_per_second').addEventListener('input', (event) => {
 
 // ----- press-to-set keys -----
 
+const US_POSITIONS = {
+  Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Backslash: '\\', Semicolon: ';',
+  Quote: "'", Comma: ',', Period: '.', Slash: '/', Backquote: '`',
+};
+
 function keyName(event) {
   const code = event.code;
   if (/^F([1-9]|1[0-2])$/.test(code)) return code.toLowerCase();
   if (code === 'Space') return 'space';
   if (code === 'Tab') return 'tab';
   if (/^Numpad\d$/.test(code)) return `num${code.slice(6)}`;
-  // For everything else use the character, so other keyboard layouts send the key they show.
+
+  if (state.platform.system === 'macos') {
+    // On macOS the bot presses a key by its position, so the key is named by where it sits
+    // (as on a US keyboard). Naming it by its character would press the wrong key on other layouts.
+    if (/^Key[A-Z]$/.test(code)) return code.slice(3).toLowerCase();
+    if (/^Digit\d$/.test(code)) return code.slice(5);
+    return US_POSITIONS[code] || null;
+  }
+  // On Windows the bot looks the character up in the current layout, so the character is the name.
   return event.key && event.key.length === 1 ? event.key.toLowerCase() : null;
 }
 
@@ -310,6 +327,7 @@ document.addEventListener('keydown', (event) => {
 
   const field = listening.name;
   const name = keyName(event);
+  listening.button.blur(); // otherwise the key's release can click the button again
   stopListening();
   if (!name || !state.keys.includes(name)) {
     return setError(field, 'that key cannot be used here. Try a letter, a number or F1 to F12');
@@ -458,7 +476,7 @@ async function ask(text) {
   try {
     const answer = await api('/api/assistant/chat', { messages: chat.slice(-CHAT_MESSAGES_SENT) });
     waiting.remove();
-    chat.push({ role: 'assistant', content: answer.reply });
+    chat.push({ role: 'assistant', content: answer.reply.slice(0, CHAT_MESSAGE_CHARS) });
     const item = chatItem('assistant', answer.reply);
     if (Object.keys(answer.changes).length || Object.keys(answer.rejected).length) {
       item.append(proposalBox(answer));

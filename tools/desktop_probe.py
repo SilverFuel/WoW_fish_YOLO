@@ -40,11 +40,8 @@ results = []
 
 
 def report(name, passed, detail):
-    results.append(passed)
+    results.append((name, passed, detail))
     print(f'{"PASS" if passed else "FAIL"}  {name}: {detail}', flush=True)
-    if ON_GITHUB:
-        level = 'notice' if passed else 'warning'
-        print(f'::{level} title=Desktop probe ({sys.platform})::{"PASS" if passed else "FAIL"} {name}: {detail}', flush=True)
 
 
 def check(name):
@@ -278,6 +275,33 @@ def main():
             taken, lost, report_text = watch(1.5)
             return lost == 0, f'returned {outcome}; {taken} samples, not in front {lost} times; {report_text}'
 
+    @check('come to the front from behind another program')
+    def _():
+        # The usual case: Start is pressed in the browser, so another program is in front
+        # and the bot has to bring the game forward from the background.
+        import subprocess
+        if platform.SYSTEM == 'windows':
+            other = subprocess.Popen(['notepad.exe'])
+            close = other.kill
+        else:
+            subprocess.run(['open', '-a', 'TextEdit'], check=False)
+            close = lambda: subprocess.run(['pkill', '-x', 'TextEdit'], check=False)
+        try:
+            deadline = time.monotonic() + 8
+            while window.is_foreground() and time.monotonic() < deadline:
+                pump(0.2)
+            behind = not window.is_foreground()
+            before = in_front_report()
+            window.focus()
+            pump(1.5)
+            return window.is_foreground(), (f'another program took the front: {behind} ({before}); '
+                                            f'after focus(): {in_front_report()}')
+        finally:
+            close()
+            pump(1.0)
+            window.focus()
+            pump(1.0)
+
     @check('one whole cast with the real fishing loop')
     def _():
         events.clear()
@@ -324,12 +348,23 @@ def main():
     return finish(root)
 
 
+def annotation(level, title, text):
+    """Print a GitHub workflow annotation. Only ten per step are kept, so the report is sent in few."""
+    escaped = text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+    print(f'::{level} title={title}::{escaped}', flush=True)
+
+
 def finish(root):
     root.destroy()
-    passed, total = sum(results), len(results)
+    passed, total = sum(1 for _, ok, _ in results if ok), len(results)
     print(f'\n{passed} of {total} checks passed.')
     if ON_GITHUB:
-        print(f'::notice title=Desktop probe ({sys.platform})::{passed} of {total} checks passed')
+        title = f'Desktop probe ({sys.platform})'
+        annotation('notice', title, f'{passed} of {total} checks passed\n' + '\n'.join(
+            f'{"PASS" if ok else "FAIL"} {name}: {detail}' for name, ok, detail in results))
+        for name, ok, detail in results:
+            if not ok:
+                annotation('warning', title, f'FAIL {name}: {detail}')
     return 0 if ON_GITHUB or passed == total else 1
 
 

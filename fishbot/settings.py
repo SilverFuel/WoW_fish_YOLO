@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import threading
+import time
 from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
 from urllib.parse import urlparse
@@ -38,6 +39,8 @@ class Settings:
     def to_dict(self):
         return asdict(self)
 
+
+SAVE_ATTEMPTS = 6
 
 # field -> (lowest, highest) for the numeric settings
 RANGES = {'lure_minutes': (1, 240), 'cast_seconds': (5, 60), 'confidence': (0.5, 0.95),
@@ -211,6 +214,8 @@ class SettingsStore:
         return settings
 
     def update(self, changes):
+        """Apply and save changes. Raises OSError if the file cannot be written; the new settings
+        are still in effect for this run."""
         # One change at a time: requests arrive on several threads, and two half-applied
         # updates would lose one of them.
         with self._lock:
@@ -224,4 +229,12 @@ class SettingsStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_name(f'{self.path.name}.{os.getpid()}.tmp')
         temporary.write_text(json.dumps(self.settings.to_dict(), indent=2), encoding='utf-8')
-        temporary.replace(self.path)
+        for attempt in range(SAVE_ATTEMPTS):
+            try:
+                temporary.replace(self.path)
+                return
+            except PermissionError:
+                # On Windows a virus scanner or a sync program can hold the file for a moment.
+                if attempt == SAVE_ATTEMPTS - 1:
+                    raise
+                time.sleep(0.05 * (attempt + 1))

@@ -89,7 +89,11 @@ def main(argv=None):
         return 1
 
     store = SettingsStore(args.settings or default_path(), platform.SYSTEM)
-    _, errors = store.update(changes_from(args))
+    try:
+        _, errors = store.update(changes_from(args))
+    except OSError as error:
+        print(f'The settings could not be saved to {store.path} ({error.strerror or error}). They apply to this run only.')
+        errors = {}
     if errors:
         for name, message in errors.items():
             print(f'{name}: {message}')

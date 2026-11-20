@@ -1,0 +1,153 @@
+import json
+
+import pytest
+
+from fishbot import keys
+from fishbot.settings import Settings, SettingsStore, apply_changes, problems_before_start
+
+
+def change(changes, current=Settings(), system='windows'):
+    return apply_changes(current, changes, system)
+
+
+def test_defaults_cannot_start_until_a_fishing_key_is_set():
+    assert problems_before_start(Settings()) == ['Set the key your fishing spell is bound to.']
+    assert problems_before_start(Settings(fishing_key='f')) == []
+
+
+def test_lure_needs_a_key_only_when_it_is_switched_on():
+    assert problems_before_start(Settings(fishing_key='f', lure_enabled=True)) == [
+        'Set the lure key, or turn the lure off.']
+    assert problems_before_start(Settings(fishing_key='f', lure_enabled=True, lure_key='l')) == []
+
+
+def test_valid_changes_are_applied_and_normalised():
+    settings, errors = change({'fishing_key': ' F ', 'cast_seconds': '30', 'confidence': 0.7,
+                               'scan_area': 'center50', 'lure_enabled': True, 'stop_hotkey': 'F10'})
+
+    assert errors == {}
+    assert (settings.fishing_key, settings.cast_seconds, settings.confidence) == ('f', 30, 0.7)
+    assert (settings.scan_area, settings.lure_enabled, settings.stop_hotkey) == ('center50', True, 'f10')
+
+
+@pytest.mark.parametrize('changes, field', [
+    ({'fishing_key': 'fishing'}, 'fishing_key'),
+    ({'fishing_key': 'é'}, 'fishing_key'),
+    ({'cast_seconds': 2}, 'cast_seconds'),
+    ({'cast_seconds': 'soon'}, 'cast_seconds'),
+    ({'cast_seconds': 20.5}, 'cast_seconds'),
+    ({'cast_seconds': True}, 'cast_seconds'),
+    ({'confidence': 0.2}, 'confidence'),
+    ({'confidence': 'nan'}, 'confidence'),
+    ({'checks_per_second': 100}, 'checks_per_second'),
+    ({'cpu_threads': 0}, 'cpu_threads'),
+    ({'scan_area': 'tiny'}, 'scan_area'),
+    ({'pause_hotkey': 'a'}, 'pause_hotkey'),
+    ({'lure_enabled': 'yes'}, 'lure_enabled'),
+    ({'assistant_url': 'localhost:11434'}, 'assistant_url'),
+    ({'assistant_url': 'file:///etc/passwd'}, 'assistant_url'),
+    ({'assistant_model': ''}, 'assistant_model'),
+    ({'not_a_setting': 1}, 'not_a_setting'),
+    ({'fishing_key': None}, 'fishing_key'),
+    ({'stop_after_minutes': [5]}, 'stop_after_minutes'),
+])
+def test_invalid_values_are_rejected_and_leave_the_setting_alone(changes, field):
+    settings, errors = change(changes)
+
+    assert list(errors) == [field]
+    assert settings == Settings()
+
+
+def test_a_bad_field_does_not_block_the_good_ones():
+    settings, errors = change({'fishing_key': 'f', 'cast_seconds': 999})
+
+    assert settings.fishing_key == 'f'
+    assert settings.cast_seconds == 20
+    assert list(errors) == ['cast_seconds']
+
+
+def test_fishing_key_cannot_be_a_hotkey():
+    settings, errors = change({'fishing_key': 'f8'})
+
+    assert settings.fishing_key == ''
+    assert 'reserved' in errors['fishing_key']
+
+
+def test_a_hotkey_cannot_take_the_fishing_key():
+    current = Settings(fishing_key='f5')
+
+    settings, errors = change({'pause_hotkey': 'f5'}, current)
+
+    assert settings.pause_hotkey == 'f8'
+    assert 'already the fishing key' in errors['pause_hotkey']
+
+
+def test_pause_and_stop_need_different_keys():
+    settings, errors = change({'stop_hotkey': 'f8'})
+
+    assert settings.stop_hotkey == 'f9'
+    assert list(errors) == ['stop_hotkey']
+
+
+def test_swapping_both_hotkeys_in_one_change_is_allowed():
+    settings, errors = change({'pause_hotkey': 'f9', 'stop_hotkey': 'f8'})
+
+    assert errors == {}
+    assert (settings.pause_hotkey, settings.stop_hotkey) == ('f9', 'f8')
+
+
+def test_fishing_and_lure_need_different_keys():
+    settings, errors = change({'lure_key': 'f'}, Settings(fishing_key='f'))
+
+    assert settings.lure_key == ''
+    assert list(errors) == ['lure_key']
+
+
+def test_numpad_keys_are_offered_on_windows_only():
+    assert change({'fishing_key': 'num1'}, system='windows')[1] == {}
+    assert list(change({'fishing_key': 'num1'}, system='macos')[1]) == ['fishing_key']
+    assert 'num1' not in keys.pressable_keys('macos')
+
+
+def test_assistant_url_loses_its_trailing_slash():
+    settings, errors = change({'assistant_url': 'http://localhost:1234/v1/'})
+
+    assert errors == {}
+    assert settings.assistant_url == 'http://localhost:1234/v1'
+
+
+def test_store_saves_changes_and_loads_them_back(tmp_path):
+    path = tmp_path / 'nested' / 'settings.json'
+    store = SettingsStore(path, 'windows')
+
+    settings, errors = store.update({'fishing_key': 'f', 'cast_seconds': 25})
+
+    assert errors == {}
+    assert json.loads(path.read_text())['cast_seconds'] == 25
+    assert SettingsStore(path, 'windows').settings == settings
+
+
+def test_store_ignores_a_corrupt_file(tmp_path):
+    path = tmp_path / 'settings.json'
+    path.write_text('{ not json')
+
+    assert SettingsStore(path, 'windows').settings == Settings()
+
+
+def test_store_keeps_good_values_from_a_file_with_some_bad_ones(tmp_path):
+    path = tmp_path / 'settings.json'
+    path.write_text(json.dumps({'fishing_key': 'f', 'cast_seconds': 9999, 'left_over': True}))
+
+    settings = SettingsStore(path, 'windows').settings
+
+    assert settings.fishing_key == 'f'
+    assert settings.cast_seconds == 20
+
+
+def test_store_does_not_rewrite_the_file_when_nothing_changed(tmp_path):
+    path = tmp_path / 'settings.json'
+    store = SettingsStore(path, 'windows')
+
+    store.update({'cast_seconds': 20})
+
+    assert not path.exists()

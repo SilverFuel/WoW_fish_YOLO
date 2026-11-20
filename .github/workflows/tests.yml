@@ -16,6 +16,10 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
         python: ['3.11', '3.13']
+        exclude:
+          # Mac build machines are scarce; one Python version is enough there.
+          - os: macos-latest
+            python: '3.11'
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -34,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest, macos-latest, macos-15-intel]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

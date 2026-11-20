@@ -81,12 +81,25 @@ Settings are saved as you change them and can be changed while the bot is stoppe
 
 ### macOS permissions
 
-macOS asks for these the first time; they are under System Settings > Privacy & Security. Grant them to the
-application you start the bot from (Terminal, for example), then start the bot again.
+macOS has to allow two things, under System Settings > Privacy & Security. Grant them to the application you start
+the bot from (Terminal, for example), then start the bot again. The bot checks both when you press Start and tells
+you which one is missing.
 
-- **Screen Recording**, so the bot can see the game. Without it the preview is black.
-- **Accessibility**, so it can press keys and click.
-- **Input Monitoring**, if `F8`/`F9` do nothing. The buttons on the page work either way.
+- **Screen Recording**, so the bot can see the game. Without it the bot sees your desktop picture instead.
+- **Accessibility**, so it can press keys and click, and can tell whether the game has the keyboard.
+
+If `F8`/`F9` do nothing, also allow **Input Monitoring**; the buttons on the page work either way. On macOS, keys
+are named by their position on a US keyboard, because that is how the bot presses them.
+
+### If it does not react
+
+```
+python tools/desktop_probe.py
+```
+
+This opens a small test window and checks each step with the bot's own code: finding the window, bringing it to the
+front, capturing it, detecting the splash, pressing a key and right-clicking. The first check that fails names the
+part that is not working on your system. It takes over the keyboard and mouse for a few seconds.
 
 ## Using less CPU and memory
 
@@ -147,19 +160,30 @@ pip install pytest
 pytest tests
 ```
 
-The tests use a simulated game and the real model, so they run on any system. On Windows and macOS they also check
-that the system-specific parts load and answer. `.github/workflows/tests.yml` runs them on Windows, macOS and Linux
-for every push once GitHub Actions is enabled for the repository.
+The tests use a simulated game and the real model, so they run on any system. `.github/workflows/tests.yml` runs
+them on Windows, macOS and Linux for every push, and also runs the desktop probe on real Windows and macOS
+machines as a report.
 
 ## What has and has not been verified
 
-- Verified on Linux: the fishing loop, settings, the control page in a real browser, and that the ONNX model gives
-  the same results as the original PyTorch model (scores within 0.00002).
-- Not yet run on real hardware: the Windows and macOS parts (finding the window, pressing keys, capturing the
-  screen). They are written against the documented system APIs, so do a short supervised run first and use
-  **Check now** to confirm the bot sees the game.
-- Not tested with a real language model: the assistant is tested against a stand-in server that speaks the same API.
-- No real splash screenshots ship with the repository, so accuracy with the smaller scan areas is unmeasured.
+- **Windows:** on GitHub's Windows machines the desktop probe passes every check, including a whole cast with the
+  real fishing loop against a test window: found, brought to the front from behind another program, captured
+  exactly, splash detected, key pressed, right-click landed on the splash.
+- **macOS:** on GitHub's macOS machines, finding the window, capturing it, detecting the splash, pressing a key,
+  right-clicking, reading a hotkey and coming to the front all pass. See the note below for the whole cast.
+- **The model:** the ONNX model gives the same results as the original PyTorch model (scores within 0.00002).
+- **The control page:** driven in a real browser against the simulated game.
+- **Not verified against the game itself.** Every check above uses a test window or a simulated game, because
+  the game cannot run on a build machine. Do a short supervised run first and use **Check now**.
+- **Not tested with a real language model.** The assistant is tested against a stand-in server that speaks the
+  same API.
+- **Accuracy with the smaller scan areas is unmeasured**, because no real splash screenshots ship with the
+  repository.
+
+In the last run that reached a Mac, the whole cast with the real fishing loop did not complete: for about
+half a second after each key press macOS did not report where the window was, and the loop gave up the cast.
+The loop now waits that moment out and asks macOS for the window directly, but that fix had not yet run on a
+Mac when this was written, so treat macOS as unconfirmed until the desktop probe passes there.
 
 ## Project layout
 
@@ -172,7 +196,8 @@ for every push once GitHub Actions is enabled for the repository.
 | `fishbot/service.py`, `fishbot/server.py`, `fishbot/web/` | The control page |
 | `fishbot/assistant.py` | The local-LLM assistant |
 | `models/splash.onnx` | The detection model |
-| `tools/` | Scripts that rebuild the model and the demo picture from the original `best.pt` |
+| `tools/desktop_probe.py` | Checks the system-specific parts against a real window |
+| `tools/` (others) | Scripts that rebuild the model and the demo picture from the original `best.pt` |
 
 `best.pt`, the original PyTorch checkpoint, is no longer in the repository; it is in the upstream one.
 `tools/export_onnx.py` converts it and checks the result against it.

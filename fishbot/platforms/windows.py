@@ -38,6 +38,26 @@ def _use_physical_pixels():
 _use_physical_pixels()
 
 
+def _keep_console_from_freezing_the_bot():
+    """Turn off QuickEdit in the classic console window.
+
+    With QuickEdit on, a click in the console starts a text selection and blocks the next print,
+    which would freeze the fishing loop in the middle of a cast until Enter is pressed.
+    """
+    quick_edit, extended_flags, standard_input = 0x0040, 0x0080, -10
+    try:
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.GetStdHandle(standard_input)
+        mode = ctypes.c_uint32()
+        if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            kernel32.SetConsoleMode(handle, (mode.value & ~quick_edit) | extended_flags)
+    except (AttributeError, OSError):
+        pass
+
+
+_keep_console_from_freezing_the_bot()
+
+
 def _process_name(hwnd):
     _, pid = win32process.GetWindowThreadProcessId(hwnd)
     try:

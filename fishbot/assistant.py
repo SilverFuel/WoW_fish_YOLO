@@ -160,6 +160,8 @@ class Assistant:
         except (TimeoutError, socket.timeout):
             raise AssistantError(504, 'The model took too long to answer. Try a smaller model.') from None
         except (urllib.error.URLError, ConnectionError, OSError) as error:
+            if isinstance(getattr(error, 'reason', None), (TimeoutError, socket.timeout)):
+                raise AssistantError(504, 'The model took too long to answer. Try a smaller model.') from None
             raise AssistantError(502, f'Could not reach {settings.assistant_url}. Is the model server running? '
                                       f'({getattr(error, "reason", error)})') from None
         except ValueError:

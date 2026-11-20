@@ -119,6 +119,7 @@ class Handler(BaseHTTPRequestHandler):
     server_version = 'WoWFishYOLO'
     sys_version = ''
     protocol_version = 'HTTP/1.1'
+    timeout = 60  # a connection that sends nothing must not hold a thread forever
 
     @property
     def app(self):

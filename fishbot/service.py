@@ -33,6 +33,7 @@ class BotService:
         self._thread = None
         self._bot = None
         self._starting = False
+        self._stop_while_starting = None
         self._detector = None
         self._detector_threads = None
         self._controls = None
@@ -78,13 +79,18 @@ class BotService:
                 return [str(error)]
 
             self._starting = True
+            self._stop_while_starting = None
             self._message = ''
             self._thread = threading.Thread(target=self._run, args=(settings, window), name='fishing', daemon=True)
             self._thread.start()
             return []
 
     def stop(self, reason='Stopped.'):
-        bot = self._bot
+        with self._lock:
+            bot = self._bot
+            if bot is None and self._starting:
+                # The loop does not exist yet (the model is loading); remember the request for it.
+                self._stop_while_starting = reason
         if bot is not None:
             bot.stop(reason)
 
@@ -125,6 +131,8 @@ class BotService:
             with self._lock:
                 self._bot, self._vision = bot, vision
                 self._starting = False
+                if self._stop_while_starting is not None:
+                    bot.stop(self._stop_while_starting)
 
             self.log(f'Started. {settings.pause_hotkey.upper()} pauses, {settings.stop_hotkey.upper()} stops.')
             threading.Thread(target=self._watch_hotkeys, args=(bot, settings, finished),
@@ -242,7 +250,7 @@ class BotService:
             sighting = vision.last if vision is not None else None
             if sighting is not None:
                 # Each new frame is a new preview while the bot runs.
-                preview = f'live-{id(sighting)}'
+                preview = f'live-{vision.looks}'
             else:
                 preview = f'still-{self._preview_id}' if self._sighting is not None else ''
 

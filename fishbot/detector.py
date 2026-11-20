@@ -81,6 +81,9 @@ class SplashDetector:
         # smaller and, at this frame rate, no slower.
         options.enable_cpu_mem_arena = False
         options.enable_mem_pattern = False
+        # By default idle worker threads spin while they wait for the next frame, which burns CPU
+        # between looks. Letting them sleep costs nothing at a few frames per second.
+        options.add_session_config_entry('session.intra_op.allow_spinning', '0')
         self._session = onnxruntime.InferenceSession(str(model_path), sess_options=options,
                                                      providers=['CPUExecutionProvider'])
         self._input_name = self._session.get_inputs()[0].name

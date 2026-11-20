@@ -1,4 +1,5 @@
 """The background service, driven through the simulated game with the real detector."""
+import threading
 import time
 
 import pytest
@@ -142,6 +143,26 @@ def test_an_error_in_the_loop_is_reported_and_the_service_survives(service, plat
     assert snapshot['state'] == 'idle'
 
 
+def test_stop_pressed_while_the_model_is_still_loading_is_not_lost(service, platform):
+    release = threading.Event()
+    real_controls = platform.create_controls
+
+    def slow_controls():
+        release.wait(10)
+        return real_controls()
+
+    platform.create_controls = slow_controls
+    assert service.start() == []
+    assert service.snapshot()['state'] == 'starting'
+
+    service.stop('Stopped.')
+    release.set()
+
+    assert wait_for(lambda: not service.running)
+    assert platform.game.events == []
+    assert service.snapshot()['message'] == 'Stopped.'
+
+
 def test_snapshot_only_returns_log_lines_after_the_cursor(service):
     service.log('one')
     cursor = service.snapshot()['log_cursor']
@@ -191,6 +212,11 @@ def test_preview_is_live_while_fishing_and_kept_afterwards(service):
     service.start()
     assert wait_for(lambda: service.snapshot()['preview'].startswith('live-'))
     assert service.preview_jpeg()[:2] == b'\xff\xd8'
+
+    # Every look gets a new tag, otherwise the page would keep showing an old picture.
+    tags = set()
+    assert wait_for(lambda: tags.add(service.snapshot()['preview']) or len(tags) >= 5)
+    assert all(tag.startswith('live-') for tag in tags)
 
     service.stop()
     service.wait(10)

@@ -53,6 +53,7 @@ class Vision:
         self._confidence = confidence
         self._fraction, self._size = SCAN_AREAS[scan_area]
         self.last = None
+        self.looks = 0  # how many pictures have been taken; lets the page tell a new one from the last
 
     def find_splash(self, region):
         """Return the screen position of the splash inside the window ``region``, or None."""
@@ -61,6 +62,7 @@ class Vision:
         detection = self._detector.detect(frame, self._size)
         confident = detection.score >= self._confidence
         self.last = Sighting(frame, detection, confident)
+        self.looks += 1
 
         if not confident:
             return None
@@ -80,6 +82,7 @@ class Vision:
         detection = self._detector.detect(frame[top:top + scan_height, left:left + scan_width], self._size)
         self.last = Sighting(frame, detection, detection.score >= self._confidence,
                              offset=(left, top), scan_size=(scan_width, scan_height))
+        self.looks += 1
         return self.last
 
 

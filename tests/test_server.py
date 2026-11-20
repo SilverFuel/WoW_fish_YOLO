@@ -1,0 +1,179 @@
+"""The control page's HTTP server, over real sockets, with the simulated game behind it."""
+import http.client
+import json
+import threading
+
+import pytest
+
+from fishbot.server import AppServer
+from fishbot.service import BotService
+from fishbot.settings import SettingsStore
+from tests.test_service import DemoPlatform, wait_for
+
+
+@pytest.fixture
+def app(tmp_path):
+    platform = DemoPlatform()
+    service = BotService(platform, SettingsStore(tmp_path / 'settings.json', platform.SYSTEM))
+    server = AppServer(service, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    server.thread = thread
+    yield server
+    service.shutdown()
+    server.httpd.shutdown()
+    server.httpd.server_close()
+
+
+def call(app, method, path, body=None, token=True, headers=None, host=None):
+    connection = http.client.HTTPConnection('127.0.0.1', app.port, timeout=20)
+    sent = {'Host': host or f'127.0.0.1:{app.port}'}
+    if token:
+        sent['X-Fishbot-Token'] = app.token if token is True else token
+    data = None
+    if body is not None:
+        data = body if isinstance(body, bytes) else json.dumps(body).encode()
+        sent['Content-Type'] = 'application/json'
+    sent.update(headers or {})
+    connection.request(method, path, body=data, headers=sent)
+    response = connection.getresponse()
+    payload = response.read()
+    connection.close()
+    return response, payload
+
+
+def call_json(app, method, path, body=None, **options):
+    response, payload = call(app, method, path, body, **options)
+    return response.status, json.loads(payload)
+
+
+def test_page_is_served_with_the_token_and_strict_headers(app):
+    response, payload = call(app, 'GET', '/', token=False)
+
+    assert response.status == 200
+    assert app.token in payload.decode()
+    assert '__TOKEN__' not in payload.decode()
+    assert "default-src 'self'" in response.getheader('Content-Security-Policy')
+    assert response.getheader('X-Content-Type-Options') == 'nosniff'
+    assert response.getheader('Cache-Control') == 'no-store'
+
+
+@pytest.mark.parametrize('path, content_type', [('/app.js', 'text/javascript'), ('/styles.css', 'text/css'),
+                                                ('/favicon.svg', 'image/svg+xml')])
+def test_static_files_are_served(app, path, content_type):
+    response, payload = call(app, 'GET', path, token=False)
+
+    assert response.status == 200
+    assert response.getheader('Content-Type').startswith(content_type)
+    assert len(payload) > 100
+
+
+@pytest.mark.parametrize('path', ['/../settings.py', '/index.html', '/web/app.js', '/api/unknown', '/favicon.ico'])
+def test_nothing_else_is_served(app, path):
+    response, _ = call(app, 'GET', path)
+
+    assert response.status == 404
+
+
+def test_api_needs_the_token(app):
+    assert call_json(app, 'GET', '/api/state', token=False)[0] == 403
+    assert call_json(app, 'GET', '/api/state', token='wrong')[0] == 403
+    assert call_json(app, 'POST', '/api/start', {}, token=False)[0] == 403
+    assert call(app, 'GET', '/api/preview.jpg', token=False)[0].status == 403
+    assert not app.service.running
+
+
+def test_requests_for_another_host_name_are_refused(app):
+    # A DNS-rebinding page reaches this server under its own host name.
+    assert call(app, 'GET', '/', token=False, host='evil.example:80')[0].status == 403
+    assert call_json(app, 'GET', '/api/state', host=f'evil.example:{app.port}')[0] == 403
+    assert call_json(app, 'GET', '/api/state', host=f'localhost:{app.port}')[0] == 200
+
+
+def test_posts_from_another_origin_are_refused(app):
+    status, _ = call_json(app, 'POST', '/api/start', {}, headers={'Origin': 'http://evil.example'})
+
+    assert status == 403
+    assert not app.service.running
+    assert call_json(app, 'POST', '/api/settings', {}, headers={'Origin': f'http://127.0.0.1:{app.port}'})[0] == 200
+
+
+def test_posts_must_be_json_objects_of_a_sane_size(app):
+    assert call_json(app, 'POST', '/api/settings', b'x=1', headers={'Content-Type': 'text/plain'})[0] == 415
+    assert call_json(app, 'POST', '/api/settings', b'{not json')[0] == 400
+    assert call_json(app, 'POST', '/api/settings', [1, 2])[0] == 400
+    assert call_json(app, 'POST', '/api/settings', {'fishing_key': 'f' * 100_000})[0] == 413
+    assert call_json(app, 'POST', '/api/pause', {'paused': 'yes'})[0] == 400
+
+
+def test_state_reports_what_the_page_needs(app):
+    status, state = call_json(app, 'GET', '/api/state')
+
+    assert status == 200
+    assert state['state'] == 'idle' and state['running'] is False
+    assert state['problems'] == ['Set the key your fishing spell is bound to.']
+    assert state['platform']['system'] == 'demo'
+    assert call_json(app, 'GET', '/api/state?since=abc')[0] == 400
+
+
+def test_settings_are_validated_and_saved(app):
+    status, result = call_json(app, 'POST', '/api/settings', {'fishing_key': 'F', 'cast_seconds': 500})
+
+    assert status == 200
+    assert result['settings']['fishing_key'] == 'f'
+    assert result['settings']['cast_seconds'] == 20
+    assert list(result['errors']) == ['cast_seconds']
+    assert app.service.store.settings.fishing_key == 'f'
+
+
+def test_start_reports_problems_instead_of_starting(app):
+    status, result = call_json(app, 'POST', '/api/start', {})
+
+    assert status == 200
+    assert result == {'problems': ['Set the key your fishing spell is bound to.']}
+
+
+def test_full_session_over_http(app):
+    call_json(app, 'POST', '/api/settings', {'fishing_key': 'f', 'checks_per_second': 15})
+    assert call_json(app, 'POST', '/api/start', {})[1] == {'problems': []}
+    assert wait_for(lambda: call_json(app, 'GET', '/api/state')[1]['stats']['looted'] >= 1)
+
+    call_json(app, 'POST', '/api/pause', {'paused': True})
+    assert wait_for(lambda: call_json(app, 'GET', '/api/state')[1]['state'] == 'paused')
+    call_json(app, 'POST', '/api/pause', {'paused': False})
+    assert wait_for(lambda: call_json(app, 'GET', '/api/state')[1]['state'] == 'fishing')
+
+    response, picture = call(app, 'GET', '/api/preview.jpg')
+    assert response.status == 200 and response.getheader('Content-Type') == 'image/jpeg'
+    assert picture[:2] == b'\xff\xd8'
+
+    call_json(app, 'POST', '/api/stop', {})
+    assert wait_for(lambda: call_json(app, 'GET', '/api/state')[1]['running'] is False)
+    final = call_json(app, 'GET', '/api/state')[1]
+    assert final['message'] == 'Stopped.'
+    assert any('looted' in entry['message'] for entry in final['log'])
+
+
+def test_preview_is_404_before_any_picture_and_check_provides_one(app):
+    assert call(app, 'GET', '/api/preview.jpg')[0].status == 404
+
+    status, result = call_json(app, 'POST', '/api/check', {})
+
+    assert status == 200 and result['ok'] is True
+    assert call(app, 'GET', '/api/preview.jpg')[0].status == 200
+
+
+def test_assistant_chat_is_refused_while_switched_off(app):
+    status, result = call_json(app, 'POST', '/api/assistant/chat', {'messages': [{'role': 'user', 'content': 'hi'}]})
+
+    assert status == 409
+    assert result == {'error': 'Turn the assistant on first.'}
+
+
+def test_quit_stops_the_server(app):
+    assert app.thread.is_alive()
+
+    assert call_json(app, 'POST', '/api/quit', {})[0] == 200
+
+    app.thread.join(5)
+    assert not app.thread.is_alive()

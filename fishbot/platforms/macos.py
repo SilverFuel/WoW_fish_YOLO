@@ -11,8 +11,8 @@ from fishbot.platforms import GameWindowNotFound
 SYSTEM = 'macos'
 LABEL = 'macOS'
 SETUP_NOTES = [
-    'Allow your terminal (or Python) under System Settings > Privacy & Security > Screen Recording, '
-    'so the bot can see the game. Without it the preview is black.',
+    'Allow the app you start the bot from (Terminal, for example) under System Settings > Privacy & Security > '
+    'Screen Recording, so the bot can see the game. Without it the bot sees your desktop picture instead.',
     'Allow it under Privacy & Security > Accessibility as well, so it can press keys and click.',
     'If F8/F9 do nothing, allow it under Input Monitoring, or use the buttons on this page. '
     'On a Mac keyboard the function keys may need the fn key.',

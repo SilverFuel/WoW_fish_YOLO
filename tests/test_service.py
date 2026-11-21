@@ -257,6 +257,24 @@ def test_stop_pressed_while_the_model_is_still_loading_is_not_lost(service, plat
     assert service.snapshot()['message'] == 'Stopped.'
 
 
+def test_pause_pressed_while_the_model_is_still_loading_is_not_lost(service, platform):
+    release = threading.Event()
+    real_controls = platform.create_controls
+
+    def slow_controls():
+        release.wait(10)
+        return real_controls()
+
+    platform.create_controls = slow_controls
+    assert service.start() == []
+    service.set_paused(True)
+    release.set()
+
+    assert wait_for(lambda: service.snapshot()['state'] == 'paused')
+    time.sleep(1.5)
+    assert platform.game.events == []
+
+
 def test_snapshot_only_returns_log_lines_after_the_cursor(service):
     service.log('one')
     cursor = service.snapshot()['log_cursor']

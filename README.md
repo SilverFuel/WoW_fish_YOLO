@@ -89,9 +89,9 @@ to click only what plausibly is a bite, and to stop and say why as soon as thing
 | What can go wrong | What the bot does about it |
 |---|---|
 | Keys or clicks reach another program | It only sends input while the game is in front and has the keyboard. Otherwise it waits. |
-| You need the mouse back | Move it and the bot pauses at once. `F8` pauses, `F9` stops, as do the buttons on the page and moving the mouse into a screen corner. |
-| It mistakes something else for a bite | Before every click: nothing is accepted in the first second after casting, at the edge of the window, or of the wrong size for a splash. |
-| It keeps clicking the same wrong thing | It stops when 3 "bites" in a row come within 2 seconds of casting, or 4 in a row are on exactly the same spot. A real bobber does neither. |
+| You need the mouse back | Move it and the bot pauses at once, before its next key press or click. Pressing the pause key right after that keeps it paused instead of resuming. `F8` pauses, `F9` stops, as do the buttons on the page and moving the mouse into a screen corner. |
+| It mistakes something else for a bite | Before every click: nothing is accepted in the first second after casting, at the edge of the window, or of the wrong size for a splash. If the game window moved after the splash was seen, the click is dropped. |
+| It keeps clicking the same wrong thing | It stops when 3 "bites" in a row come within 2 seconds of casting, or when 4 of the last 8 catches are on exactly the same spot, even with real catches in between. A real bobber does neither. |
 | Something keeps cutting the cast short | It stops after 8 recasts in 20 seconds instead of hammering the key. |
 | Nothing is caught any more (full bags, wrong key, a window opened, combat) | It stops after 5 misses in a row. |
 | Loading screen or disconnect | It stops after a few seconds of black screen. |
@@ -112,7 +112,8 @@ When the bot stops itself, the page says why and shows what to do:
    also the safest way to do a first run.
 
 What the safeguards cannot do: the bot cannot see what a click actually hit, so one wrong click can still happen
-before a pattern shows; at worst two or three before it stops. Keys go to the chat box if you leave one open.
+before a pattern shows; at worst two or three before it stops. Bringing the game to the front when you press Start
+may tap ALT on Windows; practice mode does not do even that. Keys go to the chat box if you leave one open.
 And like the rest of the bot, the safeguards are tested against a simulated game and a test window, not the game
 itself. If "Pause when I move the mouse" triggers when you did not touch the mouse, switch it off under Safety.
 
@@ -211,13 +212,15 @@ provided by GitHub. In the latest run:
 
 | Machine | Result |
 |---|---|
-| Windows | 16 of 16 checks |
-| Mac, Intel | 18 of 18 checks |
-| Mac, Apple Silicon | 18 of 18 checks |
+| Windows | 17 of 17 checks |
+| Mac, Intel | 19 of 19 checks |
+| Mac, Apple Silicon | 19 of 19 checks |
 
 On each of them that includes a whole cast with the real fishing loop: the window is found, brought to the front
 from behind another program, captured, the splash is detected, the key is pressed and the right-click lands on the
-splash. The mouse pointer is not part of what the bot sees on any of the three.
+splash. It also includes the hand-over: when the mouse is moved during a cast, the bot pauses and sends no click,
+while its own mouse movement does not make it pause. The mouse pointer is not part of what the bot sees on any of
+the three.
 
 Also verified:
 

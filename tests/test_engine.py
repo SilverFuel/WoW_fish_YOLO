@@ -525,7 +525,8 @@ def test_nothing_is_looked_at_while_the_bobber_is_still_in_the_air():
     assert game.vision.times[0] >= engine.SETTLE_AFTER_CAST_SEC
 
 
-def test_the_click_is_reported_before_it_happens():
+def test_each_click_is_reported_once_it_has_happened():
+    # Reported after the click, so that nothing slow sits between the last safety check and the click.
     game = Game(on_frame=lambda frame: SPLASH)
     seen_at_report = []
     game.bot._on_click = lambda x, y, practice: seen_at_report.append((x, y, practice, game.controls.count('click')))
@@ -533,7 +534,22 @@ def test_the_click_is_reported_before_it_happens():
 
     game.bot.run()
 
-    assert seen_at_report == [(*SPLASH, False, 0)]
+    assert seen_at_report == [(*SPLASH, False, 1)]
+
+
+def test_a_failing_click_record_does_not_break_the_loop():
+    game = Game()
+
+    def broken(x, y, practice):
+        raise RuntimeError('disk full')
+
+    game.bot._on_click = broken
+    game.stop_after('click', 3)
+
+    game.bot.run()
+
+    assert game.controls.count('click') == 3
+    assert 'The click could not be recorded (disk full).' in game.messages
 
 
 def test_a_splash_that_always_comes_at_once_stops_the_bot_before_the_third_click():
@@ -557,9 +573,9 @@ def test_catches_on_exactly_the_same_spot_stop_the_bot_before_the_fourth_click()
 
     game.bot.run()
 
-    assert game.controls.count('click') == engine.SAME_SPOT_STREAK - 1
+    assert game.controls.count('click') == engine.SAME_SPOT_COUNT - 1
     assert game.bot.stopped_by_safeguard
-    assert 'same spot' in game.bot.stop_reason
+    assert '4 of the last 4 catches were on exactly the same spot' in game.bot.stop_reason
 
 
 def test_a_miss_between_quick_catches_starts_the_count_again():
@@ -766,6 +782,7 @@ def test_practice_mode_reports_what_it_would_click_and_sends_nothing():
     assert game.recorded == [(*SPLASH, True), (700, 400, True)]
     assert game.bot.stats.practice_clicks == 2 and game.bot.stats.looted == 0 and game.bot.stats.casts == 0
     assert states == {engine.PRACTICE}
+    assert game.window.focus_calls == 0  # not even the request to bring the game forward
     assert game.messages[0].startswith('Practice mode: watching only.')
     assert 'Practice: would right-click at x: 640, y: 360 (1 so far).' in game.messages
 
@@ -778,4 +795,264 @@ def test_practice_mode_only_watches_while_the_game_is_in_front():
     game.bot.run()
 
     assert game.vision.frames == 0
+    assert game.controls.events == []
+
+
+# ----- found by an independent review of the safeguards -----
+
+def slow_bite_at(game, place):
+    """A sighting that comes after a normal wait (so the too-fast rule stays out of it), at ``place(cast)``."""
+    def on_frame(frame):
+        casts = game.controls.presses('f')
+        return place(len(casts)) if game.clock.now - casts[-1] >= 4.0 else None
+    return on_frame
+
+
+def test_real_catches_in_between_do_not_hide_a_spot_that_keeps_coming_back():
+    # same spot, real, same spot, real, same spot, real, same spot -> stopped before that fourth click
+    game = Game()
+    game.vision.on_frame = slow_bite_at(game, lambda cast: SPLASH if cast % 2 else Game.spot(cast))
+
+    game.bot.run()
+
+    clicked = [event[2] for event in game.controls.events if event[0] == 'click']
+    assert clicked.count(SPLASH) == 3 and len(clicked) == 6
+    assert '4 of the last 7 catches were on exactly the same spot' in game.bot.stop_reason
+
+
+def test_a_miss_does_not_clear_the_memory_of_spots():
+    plan = iter(['spot', 'spot', 'nothing', 'spot', 'spot'])
+    current = {}
+
+    def per_cast(frame):
+        casts = game.controls.presses('f')
+        if len(casts) != current.get('cast'):
+            current.update(cast=len(casts), outcome=next(plan))
+        return SPLASH if current['outcome'] == 'spot' and game.clock.now - casts[-1] >= 4.0 else None
+
+    game = Game(on_frame=per_cast)
+
+    game.bot.run()
+
+    assert game.controls.count('click') == 3
+    assert 'same spot' in game.bot.stop_reason
+
+
+def test_a_detection_that_wobbles_by_a_few_pixels_is_still_the_same_spot():
+    game = Game()
+    game.vision.on_frame = slow_bite_at(game, lambda cast: (SPLASH[0] + (cast % 3) * 3, SPLASH[1] - (cast % 2) * 4))
+
+    game.bot.run()
+
+    assert game.controls.count('click') == 3
+    assert 'same spot' in game.bot.stop_reason
+
+
+def test_the_same_spot_is_wider_on_a_larger_window():
+    def run(width, step):
+        game = Game()
+        game.window.region = {'left': 0, 'top': 0, 'width': width, 'height': width * 9 // 16}
+        game.vision.on_frame = slow_bite_at(game, lambda cast: (800 + cast * step, 500))
+        game.stop_after('click', 12)
+        game.bot.run()
+        return game.bot.stopped_by_safeguard
+
+    # Every catch lands 5 px to the right of the one before. At 1920 wide the spot is 7.7 px, so only
+    # the previous catch is near: no cluster. At 3840 wide it is 15.4 px, so the last four all are.
+    assert run(width=1920, step=5) is False
+    assert run(width=3840, step=5) is True
+
+
+def test_moving_the_mouse_between_a_catch_and_the_next_cast_stops_the_next_key_press():
+    game = Game(settings=HANDS_OFF)
+
+    def user_takes_over_after_the_click(event):
+        if event[0] == 'click':
+            game.controls.pointer = (150, 150)
+
+    game.controls.on_event = user_takes_over_after_the_click
+    game.clock.on_sleep = lambda count: game.bot.paused and game.clock.now > 60 and game.bot.stop()
+
+    game.bot.run()
+
+    assert len(game.controls.presses('f')) == 1 and game.controls.count('click') == 1
+    assert game.bot.paused
+
+
+def test_moving_the_mouse_while_the_lure_is_applied_stops_the_cast():
+    game = Game(settings=replace(HANDS_OFF, lure_enabled=True, lure_key='l'))
+
+    def user_takes_over_after_the_lure(event):
+        if event[:2] == ('press', 'l'):
+            game.controls.pointer = (150, 150)
+
+    game.controls.on_event = user_takes_over_after_the_lure
+    game.clock.on_sleep = lambda count: game.bot.paused and game.clock.now > 60 and game.bot.stop()
+
+    game.bot.run()
+
+    assert [event[:2] for event in game.controls.events] == [('press', 'l')]
+    assert game.bot.paused
+
+
+def test_the_pause_key_right_after_the_bot_paused_itself_keeps_it_paused():
+    def user_grabs_the_mouse(frame):
+        if frame == 2:
+            game.controls.pointer = (200, 200)
+        return None
+
+    game = Game(settings=HANDS_OFF, on_frame=user_grabs_the_mouse)
+    presses = []
+
+    def user_presses_the_pause_key(count):
+        if game.bot.paused and not presses:
+            presses.append(game.clock.now)
+            game.bot.toggle_pause()          # meant as "pause": it must not resume
+            assert game.bot.paused
+        elif game.bot.paused and len(presses) == 1 and game.clock.now > presses[0] + 1:
+            presses.append(game.clock.now)
+            game.bot.toggle_pause()          # the second press resumes
+            assert not game.bot.paused
+            game.bot.stop()
+
+    game.clock.on_sleep = user_presses_the_pause_key
+
+    game.bot.run()
+
+    assert len(presses) == 2
+    assert 'Still paused. Press the pause key again to resume.' in game.messages
+
+
+def test_the_pause_key_resumes_as_usual_once_the_bots_own_pause_is_old():
+    def user_grabs_the_mouse(frame):
+        if frame == 2:
+            game.controls.pointer = (200, 200)
+        return None
+
+    game = Game(settings=HANDS_OFF, on_frame=user_grabs_the_mouse)
+    paused_at = []
+
+    def later(count):
+        if game.bot.paused and not paused_at:
+            paused_at.append(game.clock.now)
+        elif paused_at and game.clock.now > paused_at[0] + engine.KEEP_OWN_PAUSE_SEC + 1:
+            game.bot.toggle_pause()
+            assert not game.bot.paused
+            game.bot.stop()
+
+    game.clock.on_sleep = later
+
+    game.bot.run()
+
+    assert 'Still paused. Press the pause key again to resume.' not in game.messages
+
+
+def test_a_resume_that_arrives_at_once_still_waits_for_a_still_mouse():
+    # The user is still moving the mouse when the pause is lifted again.
+    def user_grabs_the_mouse(frame):
+        if frame == 2:
+            game.controls.pointer = (200, 200)
+        return None
+
+    game = Game(settings=HANDS_OFF, on_frame=user_grabs_the_mouse)
+    resumed = []
+
+    def resume_at_once_and_keep_moving(count):
+        if game.bot.paused and not resumed:
+            game.bot.set_paused(False)
+            resumed.append(game.clock.now)
+        elif resumed and game.clock.now < resumed[0] + 1.0:
+            game.controls.pointer = (200 + count * 15, 200)
+
+    game.clock.on_sleep = resume_at_once_and_keep_moving
+    game.stop_after('press', 2)
+
+    game.bot.run()
+
+    assert game.controls.presses('f')[1] >= resumed[0] + 1.0 + engine.STILL_BEFORE_START_SEC - 0.2
+
+
+def test_nothing_is_sent_to_bring_the_game_forward_once_stop_was_asked():
+    game = Game()
+    game.bot.stop()
+
+    game.bot.run()
+
+    assert game.window.focus_calls == 0
+    assert game.controls.events == []
+
+
+def test_a_stop_that_arrives_while_the_window_is_being_checked_is_seen():
+    game = Game()
+    real_check = game.window.is_foreground
+    checks = []
+
+    def slow_check():
+        checks.append(1)
+        if len(checks) == 2:       # the check right before the first key press: stop arrives during it
+            game.bot.stop('Stopped with F9.')
+        return real_check()
+
+    game.window.is_foreground = slow_check
+
+    game.bot.run()
+
+    assert game.controls.events == []
+
+
+def test_the_click_is_dropped_when_the_window_moved_after_the_splash_was_seen():
+    game = Game(on_frame=lambda frame: SPLASH)
+
+    def user_moves_the_window(event):
+        if event[0] == 'move':
+            game.window.region = {'left': 900, 'top': 300, 'width': 1920, 'height': 1080}
+        if len(game.controls.presses('f')) == 2:
+            game.bot.stop()
+
+    game.controls.on_event = user_moves_the_window
+
+    game.bot.run()
+
+    assert game.controls.count('click') == 0
+    assert 'The game window moved or changed size after the splash was seen, so the click was dropped.' in game.messages
+
+
+def test_a_user_stop_and_a_safeguard_stop_never_mix():
+    stopped_by_user_first = Game()
+    stopped_by_user_first.bot.stop('Stopped with F9.')
+    stopped_by_user_first.bot._trip('Stopped: something looked wrong.')
+
+    stopped_by_safeguard_first = Game()
+    stopped_by_safeguard_first.bot._trip('Stopped: something looked wrong.')
+    stopped_by_safeguard_first.bot.stop('Stopped with F9.')
+
+    assert (stopped_by_user_first.bot.stop_reason, stopped_by_user_first.bot.stopped_by_safeguard) == (
+        'Stopped with F9.', False)
+    assert (stopped_by_safeguard_first.bot.stop_reason, stopped_by_safeguard_first.bot.stopped_by_safeguard) == (
+        'Stopped: something looked wrong.', True)
+
+
+def test_a_slightly_shaky_pointer_still_counts_as_a_still_mouse():
+    game = Game(settings=HANDS_OFF)
+    game.clock.on_sleep = lambda count: setattr(game.controls, 'pointer', (900 + count % 2, 700))  # 1 px of jitter
+    game.stop_after('press', 1)
+
+    game.bot.run()
+
+    assert game.controls.presses('f')[0] <= 1.0
+
+
+def test_the_bot_says_so_when_it_is_waiting_for_the_mouse():
+    game = Game(settings=HANDS_OFF)
+
+    def keeps_moving(count):
+        game.controls.pointer = (900 + 20 * count, 700)
+        if game.clock.now > 5:
+            game.bot.stop()
+
+    game.clock.on_sleep = keeps_moving
+
+    game.bot.run()
+
+    assert game.messages.count('Waiting for the mouse to be still before sending anything.') == 1
     assert game.controls.events == []

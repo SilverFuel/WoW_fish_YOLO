@@ -36,6 +36,7 @@ class BotService:
         self._bot = None
         self._starting = False
         self._stop_while_starting = None
+        self._pause_while_starting = False
         self._detector = None
         self._detector_threads = None
         self._controls = None
@@ -89,6 +90,7 @@ class BotService:
 
             self._starting = True
             self._stop_while_starting = None
+            self._pause_while_starting = False
             self._message = ''
             self._stopped_by_safeguard = False
             self._thread = threading.Thread(target=self._run, args=(settings, window), name='fishing', daemon=True)
@@ -105,7 +107,11 @@ class BotService:
             bot.stop(reason)
 
     def set_paused(self, paused):
-        bot = self._bot
+        with self._lock:
+            bot = self._bot
+            if bot is None and self._starting:
+                # The loop does not exist yet; it must not start casting against a pause already asked for.
+                self._pause_while_starting = paused
         if bot is not None:
             bot.set_paused(paused)
 
@@ -144,6 +150,8 @@ class BotService:
                 self._starting = False
                 if self._stop_while_starting is not None:
                     bot.stop(self._stop_while_starting)
+                if self._pause_while_starting:
+                    bot.set_paused(True)
 
             if not settings.practice_mode:
                 self.log(f'Started. {settings.pause_hotkey.upper()} pauses, {settings.stop_hotkey.upper()} stops.')

@@ -19,18 +19,25 @@ POLL_INTERVAL_SEC = 0.1
 
 # The bobber is still in the air this soon after casting, so nothing seen yet can be a bite.
 SETTLE_AFTER_CAST_SEC = 1.0
-# Before the first cast, and after a pause, the mouse has to be left alone for this long.
+# Before the first cast, and after a wait or a pause, the mouse has to be left alone for this long.
 STILL_BEFORE_START_SEC = 0.7
+# If that takes longer than this, say what the bot is waiting for.
+MENTION_MOUSE_AFTER_SEC = 2.0
 # The pointer moving further than this, when the bot did not move it, means the user took the mouse.
 POINTER_MOVED_PX = 8
+# After the bot pauses itself, a press of the pause key within this time means "pause", not "resume".
+KEEP_OWN_PAUSE_SEC = 5.0
 # A bite this soon after casting, this many times running, is not fishing: something on screen
 # keeps looking like a splash.
 TOO_FAST_SEC = 2.0
 TOO_FAST_STREAK = 3
-# The bobber lands somewhere new on every cast. This many "catches" running on the same spot
-# means the bot is clicking something that does not move.
-SAME_SPOT_PX = 10
-SAME_SPOT_STREAK = 4
+# The bobber lands somewhere new on every cast, while something that does not move is seen on the
+# same pixels again and again. This many of the last few catches on one spot stop the bot. The
+# spot is as wide as a detection wobbles: a share of the window, with a floor for small windows.
+SAME_SPOT_COUNT = 4
+CATCHES_REMEMBERED = 8
+SAME_SPOT_SHARE = 0.004
+SAME_SPOT_MIN_PX = 6
 # Recasting this often within this many seconds means every cast is being cut short.
 CAST_BURST_COUNT = 8
 CAST_BURST_SEC = 20.0
@@ -62,6 +69,10 @@ class Stats:
     practice_clicks: int = 0
 
 
+def _far_apart(a, b, distance):
+    return abs(a[0] - b[0]) > distance or abs(a[1] - b[1]) > distance
+
+
 class FishingBot:
     """Runs the fishing loop until stopped.
 
@@ -69,7 +80,7 @@ class FishingBot:
     another application makes the bot wait instead of typing into it. ``stop``, ``set_paused``
     and ``toggle_pause`` may be called from other threads (the hotkeys and the interface).
 
-    ``on_click(x, y, practice)`` is called just before each right-click (or, in practice mode,
+    ``on_click(x, y, practice)`` is called right after each right-click (or, in practice mode,
     instead of it), so the caller can keep a record of what was clicked.
     """
 
@@ -84,14 +95,18 @@ class FishingBot:
         self._log = log
         self._on_click = on_click
         self._stop = threading.Event()
+        self._stop_lock = threading.Lock()
         self._paused = threading.Event()
+        self._paused_itself_at = None
         self._last_lure = None
         self._started = None
-        self._pointer = None            # where the bot last left the pointer
-        self._pointer_still_since = None
+        self._pointer = None            # where the pointer has to be: where the bot left it
         self._mouse_must_settle = True  # before the first cast, and again after every wait or pause
+        self._settling_at = None
+        self._settling_since = None
         self._cast_times = collections.deque()
-        self._catches = collections.deque(maxlen=max(TOO_FAST_STREAK, SAME_SPOT_STREAK))
+        self._fast_in_a_row = 0
+        self._spots = collections.deque(maxlen=CATCHES_REMEMBERED)
         self.stats = Stats()
         self.state = WAITING
         self.stop_reason = ''
@@ -99,22 +114,35 @@ class FishingBot:
 
     # ----- control from outside -----
 
-    def stop(self, reason='Stopped.'):
-        if not self._stop.is_set():
-            self.stop_reason = reason
-            self._stop.set()
+    def stop(self, reason='Stopped.', safeguard=False):
+        """Stop for good. The first reason given is the one that is kept."""
+        with self._stop_lock:
+            if not self._stop.is_set():
+                self.stop_reason = reason
+                self.stopped_by_safeguard = safeguard
+                self._stop.set()
 
     def set_paused(self, paused, message=None):
         if paused == self._paused.is_set():
             return
+        # Whichever way this goes, the next cast waits for the mouse to be left alone again.
+        self._require_still_mouse()
         if paused:
             self._paused.set()
             self._log(message or 'Paused.')
         else:
+            self._paused_itself_at = None
             self._paused.clear()
             self._log('Resumed.')
 
     def toggle_pause(self):
+        """The pause key. Right after the bot paused itself, a press means "pause", so it stays paused."""
+        paused_itself = self._paused_itself_at
+        if (self._paused.is_set() and paused_itself is not None
+                and self._clock() - paused_itself < KEEP_OWN_PAUSE_SEC):
+            self._paused_itself_at = None
+            self._log('Still paused. Press the pause key again to resume.')
+            return
         self.set_paused(not self._paused.is_set())
 
     @property
@@ -128,12 +156,14 @@ class FishingBot:
 
     def run(self):
         self._started = self._clock()
-        self._window.focus()
 
         try:
             if self._settings.practice_mode:
+                # Nothing at all is sent in practice mode, not even the request to bring the game forward.
                 self._watch_only()
             else:
+                if not self._stop.is_set():
+                    self._window.focus()
                 self._fish()
         finally:
             self.state = STOPPED
@@ -151,7 +181,7 @@ class FishingBot:
             if result is CastResult.MISSED:
                 self.stats.missed += 1
                 self.stats.misses_in_a_row += 1
-                self._catches.clear()
+                self._fast_in_a_row = 0
                 self._log('No fish caught. Check that you are in first-person view, the interface is '
                           'hidden and the bobber is inside the scanned area.')
 
@@ -189,8 +219,7 @@ class FishingBot:
 
     def _trip(self, reason):
         """Stop because something does not look right. The bot never tries to fix it with more input."""
-        self.stopped_by_safeguard = True
-        self.stop(reason)
+        self.stop(reason, safeguard=True)
 
     def _limit_reached(self):
         minutes = self._settings.stop_after_minutes
@@ -225,24 +254,24 @@ class FishingBot:
             return True
         return False
 
-    def _not_a_plausible_catch(self, seconds_since_cast, spot):
-        """Judge a sighting against the last few before clicking it. Trips the bot if they look wrong."""
-        self._catches.append((seconds_since_cast, spot))
-        catches = list(self._catches)
-
-        fast = catches[-TOO_FAST_STREAK:]
-        if len(fast) == TOO_FAST_STREAK and all(seconds < TOO_FAST_SEC for seconds, _ in fast):
+    def _not_a_plausible_catch(self, seconds_since_cast, spot, window_width):
+        """Judge a sighting against the recent ones before clicking it. Trips the bot if they look wrong."""
+        self._fast_in_a_row = self._fast_in_a_row + 1 if seconds_since_cast < TOO_FAST_SEC else 0
+        if self._fast_in_a_row >= TOO_FAST_STREAK:
             self._trip(f'Stopped: {TOO_FAST_STREAK} times in a row the bot saw a splash within {TOO_FAST_SEC:g} seconds '
                        'of casting. A real bite takes longer, so it is probably looking at something else. '
                        'Recent clicks shows what it clicked.')
             return True
 
-        same = [place for _, place in catches[-SAME_SPOT_STREAK:]]
-        if len(same) == SAME_SPOT_STREAK and all(
-                abs(a[0] - b[0]) <= SAME_SPOT_PX and abs(a[1] - b[1]) <= SAME_SPOT_PX for a in same for b in same):
-            self._trip(f'Stopped: {SAME_SPOT_STREAK} catches in a row were on exactly the same spot. The bobber lands '
-                       'somewhere new on every cast, so the bot is probably clicking something that is not the '
-                       'bobber. Recent clicks shows what it clicked.')
+        # Real catches in between do not hide a spot that keeps coming back, so this looks at the
+        # last few catches together rather than at an unbroken run.
+        tolerance = max(SAME_SPOT_MIN_PX, SAME_SPOT_SHARE * window_width)
+        self._spots.append(spot)
+        here = sum(1 for earlier in self._spots if not _far_apart(earlier, spot, tolerance))
+        if here >= SAME_SPOT_COUNT:
+            self._trip(f'Stopped: {here} of the last {len(self._spots)} catches were on exactly the same spot. The bobber '
+                       'lands somewhere new on every cast, so the bot is probably clicking something that is not '
+                       'the bobber. Recent clicks shows what it clicked.')
             return True
 
         return False
@@ -262,13 +291,16 @@ class FishingBot:
     def _user_took_the_mouse(self):
         """Whether the pointer is somewhere the bot did not leave it. If so, pause and hand over."""
         now = self._pointer_now()
-        if now is None or self._pointer is None:
-            return False
-        if abs(now[0] - self._pointer[0]) <= POINTER_MOVED_PX and abs(now[1] - self._pointer[1]) <= POINTER_MOVED_PX:
+        if now is None or self._pointer is None or not _far_apart(now, self._pointer, POINTER_MOVED_PX):
             return False
 
+        self._paused_itself_at = self._clock()
         self.set_paused(True, 'Paused: you moved the mouse, so the bot let go. Resume when you want it to continue.')
         return True
+
+    def _require_still_mouse(self):
+        self._mouse_must_settle = True
+        self._settling_since = None
 
     def _mouse_has_settled(self):
         """True once the mouse has been left alone for a moment. Always true if the check is off."""
@@ -276,19 +308,31 @@ class FishingBot:
         if now is None or not self._mouse_must_settle:
             return True
 
-        if now != self._pointer:
-            self._pointer = now
-            self._pointer_still_since = self._clock()
+        if self._settling_since is None or _far_apart(now, self._settling_at, POINTER_MOVED_PX):
+            self._settling_at = now
+            self._settling_since = self._clock()
             return False
-        if self._clock() - self._pointer_still_since < STILL_BEFORE_START_SEC:
+        if self._clock() - self._settling_since < STILL_BEFORE_START_SEC:
             return False
 
+        self._pointer = now
         self._mouse_must_settle = False
         return True
 
+    def _window_moved(self, region):
+        """Whether the game window is no longer where it was when the splash was seen there."""
+        if self._window.capture_region() == region:
+            return False
+        self._log('The game window moved or changed size after the splash was seen, so the click was dropped.')
+        return True
+
     def _record_click(self, x, y, practice):
-        if self._on_click is not None:
+        if self._on_click is None:
+            return
+        try:
             self._on_click(x, y, practice)
+        except Exception as error:  # keeping a record must never get in the way of fishing or stopping
+            self._log(f'The click could not be recorded ({error}).')
 
     # ----- waiting and acting -----
 
@@ -296,6 +340,7 @@ class FishingBot:
         """Block until input may be sent. Returns False once the bot should shut down."""
         announced = False
         practice = self._settings.practice_mode
+        waiting_for_mouse_since = None
 
         while not self._stop.is_set():
             if not self._window.exists():
@@ -304,15 +349,22 @@ class FishingBot:
 
             if self._paused.is_set():
                 self.state = PAUSED
-                self._mouse_must_settle = True
+                waiting_for_mouse_since = None
             elif self._window.is_foreground() and self._window.capture_region() is not None:
                 # In practice mode the user is playing, so the mouse is theirs throughout.
                 if practice or self._mouse_has_settled():
                     self.state = PRACTICE if practice else FISHING
                     return True
+                self.state = WAITING
+                if waiting_for_mouse_since is None:
+                    waiting_for_mouse_since = self._clock()
+                elif waiting_for_mouse_since is not False and self._clock() - waiting_for_mouse_since >= MENTION_MOUSE_AFTER_SEC:
+                    self._log('Waiting for the mouse to be still before sending anything.')
+                    waiting_for_mouse_since = False  # said once
             else:
                 self.state = WAITING
-                self._mouse_must_settle = True
+                self._require_still_mouse()
+                waiting_for_mouse_since = None
                 if not announced:
                     self._log('Waiting for the game window to be in front. Nothing is sent to other windows.')
                     announced = True
@@ -322,10 +374,13 @@ class FishingBot:
         return False
 
     def _can_act(self):
-        return not self._stop.is_set() and not self._paused.is_set() and self._window.is_foreground()
+        # The slow question first and the flags last: a stop or pause that arrives while the system
+        # is being asked about the window is then still seen.
+        in_front = self._window.is_foreground()
+        return in_front and not self._stop.is_set() and not self._paused.is_set()
 
     def _press(self, key):
-        if not self._can_act():
+        if self._user_took_the_mouse() or not self._can_act():
             return False
         self._controls.press(key)
         return True
@@ -355,8 +410,6 @@ class FishingBot:
             self._sleep(LURE_APPLY_WAIT_SEC)
 
     def _cast(self):
-        # Where the pointer is now is where the bot expects it to stay until it moves it itself.
-        self._pointer = self._pointer_now()
         if self._recasting_too_often() or not self._press(self._settings.fishing_key):
             return CastResult.INTERRUPTED
 
@@ -372,7 +425,7 @@ class FishingBot:
 
         while self._clock() < deadline:
             frame_started = self._clock()
-            if not self._can_act() or self._user_took_the_mouse():
+            if self._user_took_the_mouse() or not self._can_act():
                 return CastResult.INTERRUPTED
 
             # Read on every frame, so the window can be moved or resized while fishing.
@@ -395,9 +448,9 @@ class FishingBot:
 
             if position is not None:
                 spot = (position[0] - region['left'], position[1] - region['top'])
-                if self._not_a_plausible_catch(self._clock() - cast_started, spot):
+                if self._not_a_plausible_catch(self._clock() - cast_started, spot, region['width']):
                     return CastResult.INTERRUPTED
-                return CastResult.LOOTED if self._loot(*position) else CastResult.INTERRUPTED
+                return CastResult.LOOTED if self._loot(position[0], position[1], region) else CastResult.INTERRUPTED
 
             # Looking a few times a second is enough to catch the splash and leaves the CPU mostly idle.
             self._sleep(frame_interval - (self._clock() - frame_started))
@@ -405,17 +458,18 @@ class FishingBot:
         return CastResult.MISSED
 
     # Right click on the bobber to loot the fish, player must enable automatic looting
-    def _loot(self, x, y):
+    def _loot(self, x, y, region):
         self._sleep(random.random())
-        if not self._can_act() or self._user_took_the_mouse():
+        if self._window_moved(region) or self._user_took_the_mouse() or not self._can_act():
             return False
         self._controls.moveTo(x, y, random.uniform(0.1, 0.3))
         self._expect_pointer_at(x, y)
 
         self._sleep(random.random())
-        if not self._can_act() or self._user_took_the_mouse():
+        # The last look before the click, slowest question first: is the window still where the
+        # splash was seen, is the mouse still where the bot left it, and has nobody stopped or paused.
+        if self._window_moved(region) or self._user_took_the_mouse() or not self._can_act():
             return False
-        self._record_click(x, y, practice=False)
         # Click at the splash itself rather than wherever the pointer is.
         self._controls.click(x=x, y=y, button='right')
         self._expect_pointer_at(x, y)
@@ -423,4 +477,5 @@ class FishingBot:
         self.stats.looted += 1
         self.stats.misses_in_a_row = 0
         self._log(f'Splash at x: {x}, y: {y} - looted ({self.stats.looted} this session).')
+        self._record_click(x, y, practice=False)
         return True

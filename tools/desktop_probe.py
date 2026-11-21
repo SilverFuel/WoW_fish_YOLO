@@ -347,29 +347,39 @@ def main():
         began = time.monotonic()
 
         class Traced:
-            """Passes every call through, noting what the loop was told."""
+            """Passes everything through, noting the calls that matter for reading a failure."""
             def __init__(self, target, label):
                 self._target, self._label = target, label
 
             def __getattr__(self, name):
-                method = getattr(self._target, name)
+                value = getattr(self._target, name)
+                if not callable(value):
+                    return value  # plain values, such as a counter, are not calls
 
                 def call(*arguments, **keywords):
-                    result = method(*arguments, **keywords)
-                    if len(trace) < 28:
-                        shown = result if not isinstance(result, dict) else 'region'
+                    result = value(*arguments, **keywords)
+                    routine = name in ('exists', 'position') or (name in ('is_foreground', 'capture_region') and result)
+                    if not routine and len(trace) < 40:
                         extra = ''
-                        if name == 'is_foreground' and not result:
+                        if name == 'is_foreground':
                             extra = ' ' + in_front_report()
                         if name == 'find_splash':
                             extra = f' score={vision.last.detection.score:.2f}'
-                        trace.append(f'{time.monotonic() - began:.2f}s {self._label}.{name}={shown}{extra}')
+                        trace.append(f'{time.monotonic() - began:.2f}s {self._label}.{name}={result}{extra}')
                     return result
                 return call
 
         bot = FishingBot(Settings(fishing_key='f', stop_after_misses=0), Traced(window, 'window'),
                          Traced(vision, 'vision'), Traced(controls, 'controls'), log=messages.append)
-        thread = threading.Thread(target=bot.run, daemon=True)
+        crashed = []
+
+        def run():
+            try:
+                bot.run()
+            except Exception as error:  # a crash in the loop must show up in the report, not vanish with the thread
+                crashed.append(f'{type(error).__name__}: {error}')
+
+        thread = threading.Thread(target=run, daemon=True)
         thread.start()
         deadline = time.monotonic() + 40
         while bot.stats.looted < 1 and thread.is_alive() and time.monotonic() < deadline:
@@ -379,10 +389,10 @@ def main():
         thread.join(5)
         clicks = [event for event in events if event[0] == 'button' and event[1] in (2, 3)]
         on_target = any(abs(event[2] - SPLASH[0]) <= NEAR and abs(event[3] - SPLASH[1]) <= NEAR for event in clicks)
-        passed = bot.stats.looted >= 1 and ('key', 'f') in events and on_target
+        passed = bot.stats.looted >= 1 and ('key', 'f') in events and on_target and not crashed
         return passed, (f'casts {bot.stats.casts}, looted {bot.stats.looted}; window received key f: {("key", "f") in events}, '
-                        f'right-clicks: {clicks}; picture just before the cast: {before_cast}; '
-                        f'first calls: {trace if not passed else trace[:12]}')
+                        f'right-clicks: {clicks}; picture just before the cast: {before_cast}; error in the loop: {crashed or None}; '
+                        f'paused: {bot.paused}; log: {messages[-4:]}; calls: {trace if not passed else trace[:10]}')
 
     @check('moving the mouse makes the bot let go')
     def _():

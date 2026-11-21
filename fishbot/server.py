@@ -12,6 +12,8 @@ from __future__ import annotations
 import hmac
 import json
 import secrets
+import socket
+import sys
 import threading
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -71,6 +73,21 @@ class BadRequest(Exception):
         self.message = message
 
 
+class PageServer(ThreadingHTTPServer):
+    """The server behind the page. It never shares its port with another program.
+
+    On Windows the usual "reuse address" option lets a second program open a port that is already
+    in use, and the two then take turns answering. There the port is asked for exclusively instead,
+    so a port that is taken is refused and the next one is tried.
+    """
+    allow_reuse_address = sys.platform != 'win32'
+
+    def server_bind(self):
+        if sys.platform == 'win32':
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 class AppServer:
     def __init__(self, service, port=DEFAULT_PORT):
         self.service = service
@@ -84,10 +101,10 @@ class AppServer:
     @staticmethod
     def _bind(port):
         if port == 0:
-            return ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+            return PageServer(('127.0.0.1', 0), Handler)
         for candidate in range(port, port + PORT_ATTEMPTS):
             try:
-                return ThreadingHTTPServer(('127.0.0.1', candidate), Handler)
+                return PageServer(('127.0.0.1', candidate), Handler)
             except OSError:
                 continue
         raise OSError(f'No free port between {port} and {port + PORT_ATTEMPTS - 1}.')

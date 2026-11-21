@@ -299,7 +299,9 @@ def test_a_copy_that_had_to_use_another_port_is_still_found(tmp_path):
 
     platform = DemoPlatform()
     service = BotService(platform, SettingsStore(tmp_path / 'settings.json', platform.SYSTEM))
-    server = AppServer(service, port=usual_port)  # taken, so it moves along
+    # Taken, so it has to move along. On Windows this needs the port to be asked for exclusively:
+    # with the usual option a second program can open a port that is already in use.
+    server = AppServer(service, port=usual_port)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
         assert server.port != usual_port

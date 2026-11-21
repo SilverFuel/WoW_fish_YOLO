@@ -61,7 +61,7 @@ mouse**.
 the buttons and bars hidden.
 
 **My bags filled up.** It cannot see your bags, and it does nothing with what is in them. When the bags are
-full it keeps casting and clicking, but nothing more is kept. Make room before you start, set a time limit under
+full it keeps casting and clicking, but nothing more is kept. Make room before you start, set a limit on catches or time under
 **More options**, and see [Keeping your bags clear](#keeping-your-bags-clear-optional) below.
 
 **It makes my computer slow.** Open **More options** and choose **Watch the middle**. The bobber then has to
@@ -88,7 +88,7 @@ Read this first:
   item in your bags, one per cast, not only the ones you fished up. Move anything grey you want to keep to the
   bank first.
 - **It keeps everything else**: fish, lockboxes, trunks, and anything white or better. So your bags still fill
-  up, only much more slowly. Keep a time limit set.
+  up, only much more slowly. Keep a catch or time limit set.
 - **This has not been tested in the game.** Try it by hand before you let it run.
 
 How to set it up:

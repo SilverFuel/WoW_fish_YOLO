@@ -65,6 +65,8 @@ def test_valid_changes_are_applied_and_normalised():
     ({'not_a_setting': 1}, 'not_a_setting'),
     ({'fishing_key': None}, 'fishing_key'),
     ({'stop_after_minutes': [5]}, 'stop_after_minutes'),
+    ({'stop_after_catches': -1}, 'stop_after_catches'),
+    ({'stop_after_catches': 10001}, 'stop_after_catches'),
 ])
 def test_invalid_values_are_rejected_and_leave_the_setting_alone(changes, field):
     settings, errors = change(changes)

@@ -39,6 +39,7 @@ SUGGESTABLE = {
     'checks_per_second': 'how often it looks for the splash (default 5)',
     'cpu_threads': 'CPU threads for the detector (default 2)',
     'stop_after_minutes': 'stop after this many minutes, 0 = no limit',
+    'stop_after_catches': 'stop after this many catches, 0 = no limit; a simple way to stop before the bags fill up',
     'stop_after_misses': 'stop after this many casts in a row with no catch, 0 = off (default 5)',
     'pause_on_mouse_move': 'true (default) = pause as soon as the user moves the mouse',
     'pause_hotkey': '"f1" to "f12"',
@@ -64,7 +65,7 @@ Common problems:
   (use "full"); wrong fishing key; confidence too high (try 0.7); cast_seconds shorter than the real cast.
 - Full bags: the bot cannot see the bags and does nothing with what is in them. When they are full it keeps
   casting and clicking, but nothing more is kept, and "Caught" keeps counting. Advise emptying the bags first and
-  setting stop_after_minutes. The game itself can throw away grey junk with a macro on the fishing key; the steps
+  setting stop_after_catches or stop_after_minutes. The game itself can throw away grey junk with a macro on the fishing key; the steps
   are in docs/help.md under "Keeping your bags clear". Do not write that macro yourself.
 - Nothing happens: the game is not the window in front; on macOS the Accessibility permission is missing;
   on Windows the game runs as administrator and the bot does not.

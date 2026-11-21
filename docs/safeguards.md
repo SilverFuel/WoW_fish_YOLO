@@ -14,7 +14,7 @@ clicks what plausibly is a bite, and it stops and says why as soon as things sto
 | Something keeps interrupting the cast | It stops after 8 casts in 20 seconds instead of hammering the key. |
 | Nothing bites any more (wrong key, a window opened, a fight) | It stops after 5 casts in a row with no fish. |
 | A loading screen or a disconnect | It stops after a few seconds of black screen. |
-| It is left running | You can set a time limit under **More options**. |
+| It is left running, or the bags fill up | You can set a limit on time or on catches under **More options**. |
 | It fails | It stops and says so on the page. The page keeps working. |
 
 **It never tries to fix things by pressing more keys.** In the game, `Esc` closes an open window but opens the
@@ -36,8 +36,8 @@ The page says why and shows three steps:
 - It cannot see what a click actually hit. One wrong click can still happen before a pattern shows; at worst
   two or three before it stops.
 - It cannot see your bags. When they are full it keeps casting and clicking, but nothing more is kept, and
-  **Caught** keeps counting, because it counts a catch when it clicks the bobber. Make room first and set a time
-  limit. The game can throw away junk for you with a macro: see [Help](help.md#keeping-your-bags-clear-optional).
+  **Caught** keeps counting, because it counts a catch when it clicks the bobber. Make room first and set a limit
+  on catches or time. The game can throw away junk for you with a macro: see [Help](help.md#keeping-your-bags-clear-optional).
 - If you leave the chat box open in the game, its key presses are typed into it.
 - On Windows, bringing the game to the front when you press Start may tap `Alt`. Practice does not do even that.
 - All of this is tested against a pretend game and a test window, not the game itself. Do a short run while

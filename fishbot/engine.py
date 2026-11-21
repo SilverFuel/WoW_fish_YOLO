@@ -225,6 +225,11 @@ class FishingBot:
             self.stop(f'Stopped: your {minutes} minute limit is up.')
             return True
 
+        catches = self._settings.stop_after_catches
+        if catches and self.stats.looted >= catches:
+            self.stop(f'Stopped: you reached your limit of {catches} catch{"" if catches == 1 else "es"}.')
+            return True
+
         misses = self._settings.stop_after_misses
         if misses and self.stats.misses_in_a_row >= misses:
             self._trip(f'Stopped: no fish in {misses} cast{"" if misses == 1 else "s"}. Check that the fishing key is right, '

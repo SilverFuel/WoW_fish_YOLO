@@ -505,6 +505,34 @@ def test_stops_when_the_time_limit_is_reached():
     assert '2 minute limit' in game.bot.stop_reason
 
 
+def test_stops_when_the_catch_limit_is_reached_without_casting_again():
+    game = Game(settings=replace(BASE, stop_after_catches=3))
+
+    game.bot.run()
+
+    assert game.bot.stats.looted == 3
+    assert len(game.controls.presses('f')) == 3
+    assert game.bot.stop_reason == 'Stopped: you reached your limit of 3 catches.'
+    assert not game.bot.stopped_by_safeguard
+
+
+def test_a_catch_limit_of_one_reads_naturally():
+    game = Game(settings=replace(BASE, stop_after_catches=1))
+
+    game.bot.run()
+
+    assert game.bot.stop_reason == 'Stopped: you reached your limit of 1 catch.'
+
+
+def test_practice_clicks_do_not_count_towards_the_catch_limit():
+    game = Game(settings=replace(BASE, stop_after_catches=1, stop_after_minutes=2), on_frame=lambda frame: SPLASH, practice=True)
+
+    game.bot.run()
+
+    assert game.bot.stats.practice_clicks > 1
+    assert '2 minute limit' in game.bot.stop_reason
+
+
 def test_stop_keeps_the_first_reason():
     game = Game()
 

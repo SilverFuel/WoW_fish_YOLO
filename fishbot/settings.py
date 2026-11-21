@@ -31,6 +31,7 @@ class Settings:
     checks_per_second: int = 5
     cpu_threads: int = 2
     stop_after_minutes: int = 0
+    stop_after_catches: int = 0
     stop_after_misses: int = 5
     pause_on_mouse_move: bool = True
     assistant_enabled: bool = False
@@ -46,13 +47,13 @@ SAVE_ATTEMPTS = 6
 # field -> (lowest, highest) for the numeric settings
 RANGES = {'lure_minutes': (1, 240), 'cast_seconds': (5, 60), 'confidence': (0.5, 0.95),
           'checks_per_second': (1, 15), 'cpu_threads': (1, 8),
-          'stop_after_minutes': (0, 1440), 'stop_after_misses': (0, 100)}
+          'stop_after_minutes': (0, 1440), 'stop_after_catches': (0, 10000), 'stop_after_misses': (0, 100)}
 
 LABELS = {'fishing_key': 'Fishing key', 'lure_key': 'Lure key', 'lure_minutes': 'How long a lure lasts',
           'pause_hotkey': 'Pause key', 'stop_hotkey': 'Stop key', 'cast_seconds': 'Wait for a bite',
           'confidence': 'How sure it must be', 'scan_area': 'How much of the game it watches',
           'checks_per_second': 'Looks per second', 'cpu_threads': 'How much of the processor it uses',
-          'stop_after_minutes': 'Stop after this many minutes', 'stop_after_misses': 'Stop after casts with no fish',
+          'stop_after_minutes': 'Stop after this many minutes', 'stop_after_catches': 'Stop after this many catches', 'stop_after_misses': 'Stop after casts with no fish',
           'assistant_url': 'Where the assistant runs',
           'assistant_model': 'Which assistant model', 'lure_enabled': 'Use a lure',
           'assistant_enabled': 'Assistant', 'pause_on_mouse_move': 'Let go when I move the mouse'}

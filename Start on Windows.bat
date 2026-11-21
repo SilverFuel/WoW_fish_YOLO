@@ -15,7 +15,7 @@ rem Set up again whenever the list of things it needs changes, not only the firs
 fc /b requirements.txt ".venv\requirements.installed" >nul 2>nul
 if errorlevel 1 (
     echo Setting up WoW Fish YOLO. This happens once and takes a few minutes...
-    %PY% -m venv --clear .venv
+    call %PY% -m venv --clear .venv
     if not exist ".venv\Scripts\python.exe" goto failed
     ".venv\Scripts\python.exe" -m pip install --quiet --disable-pip-version-check --upgrade pip
     ".venv\Scripts\python.exe" -m pip install --quiet --disable-pip-version-check -r requirements.txt
@@ -30,8 +30,9 @@ if errorlevel 1 pause
 exit /b
 
 rem Is this Python 64-bit and between 3.11 and 3.<first argument>? If so, use it.
+rem "call" is needed because some set-ups provide Python through a small .bat file.
 :try
-%2 %3 -c "import sys; sys.exit(not ((3, 11) <= sys.version_info[:2] <= (3, %1) and sys.maxsize > 2**32))" >nul 2>nul
+call %2 %3 -c "import sys; sys.exit(not ((3, 11) <= sys.version_info[:2] <= (3, %1) and sys.maxsize > 2**32))" >nul 2>nul
 if errorlevel 1 exit /b 0
 set "PY=%2 %3"
 if "%1"=="14" set "KNOWN=yes"
@@ -51,7 +52,7 @@ exit /b 1
 echo.
 echo Setting up did not finish. Check your internet connection, then double-click this file again.
 if defined KNOWN goto morehelp
-%PY% -c "import sys; print('It used Python %%d.%%d, which may be too new. Python 3.13 is known to work:' %% sys.version_info[:2])"
+call %PY% -c "import sys; print('It used Python {}.{}, which may be too new. Python 3.13 is known to work:'.format(*sys.version_info[:2]))"
 echo install it as well, then double-click this file again.
 :morehelp
 echo More help: docs\help.md

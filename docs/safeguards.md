@@ -37,7 +37,7 @@ The page says why and shows three steps:
   two or three before it stops.
 - It cannot see your bags. When they are full it keeps casting and clicking, but nothing more is kept, and
   **Caught** keeps counting, because it counts a catch when it clicks the bobber. Make room first and set a time
-  limit.
+  limit. The game can throw away junk for you with a macro: see [Help](help.md#keeping-your-bags-clear-optional).
 - If you leave the chat box open in the game, its key presses are typed into it.
 - On Windows, bringing the game to the front when you press Start may tap `Alt`. Practice does not do even that.
 - All of this is tested against a pretend game and a test window, not the game itself. Do a short run while

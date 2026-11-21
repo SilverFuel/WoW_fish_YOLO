@@ -60,9 +60,9 @@ mouse**.
 **It stopped with "no fish".** Usually the fishing key is wrong, or the game is not zoomed all the way in with
 the buttons and bars hidden.
 
-**My bags filled up.** It cannot see your bags, and it does nothing with what is in them: it does not open,
-sort, sell or throw away anything. When the bags are full it keeps casting and clicking, but nothing more is
-kept. Make room before you start, and set a time limit under **More options** so it does not fish for nothing.
+**My bags filled up.** It cannot see your bags, and it does nothing with what is in them. When the bags are
+full it keeps casting and clicking, but nothing more is kept. Make room before you start, set a time limit under
+**More options**, and see [Keeping your bags clear](#keeping-your-bags-clear-optional) below.
 
 **It makes my computer slow.** Open **More options** and choose **Watch the middle**. The bobber then has to
 land in the middle of the screen; **Take a look** shows the area as a blue box.
@@ -75,6 +75,44 @@ python tools/desktop_probe.py
 ```
 
 Run it with the Python inside the folder: `.venv\Scripts\python` on Windows, `.venv/bin/python` on a Mac.
+
+## Keeping your bags clear (optional)
+
+It cannot see your bags, but the game can throw away junk for you. You make one small macro in the game and put
+it on your fishing key. Each time the key is pressed, the game first throws away one grey item, then casts.
+Nothing changes on the page: your fishing key stays the same.
+
+Read this first:
+
+- **It throws away grey items for good.** Grey is the game's own label for junk. Over time it removes every grey
+  item in your bags, one per cast, not only the ones you fished up. Move anything grey you want to keep to the
+  bank first.
+- **It keeps everything else**: fish, lockboxes, trunks, and anything white or better. So your bags still fill
+  up, only much more slowly. Keep a time limit set.
+- **This has not been tested in the game.** Try it by hand before you let it run.
+
+How to set it up:
+
+1. In the game, type `/macro` and press **New**. Give it any name and picture.
+2. Paste these two lines into it:
+
+   ```
+   /run for b=0,4 do for s=1,C_Container.GetContainerNumSlots(b) do local i=C_Container.GetContainerItemInfo(b,s) if i and i.quality==0 then C_Container.PickupContainerItem(b,s) DeleteCursorItem() ClearCursor() return end end end
+   /cast Fishing
+   ```
+
+3. Drag the macro onto the button your fishing key presses, in place of the Fishing spell.
+4. Try it by hand. With one grey item in your bags, press your fishing key once. The grey item should disappear
+   and you should cast as usual.
+
+If the game shows an error instead, you are on an older version of the game. Use these two lines:
+
+```
+/run for b=0,4 do for s=1,GetContainerNumSlots(b) do local l=GetContainerItemLink(b,s) if l and select(3,GetItemInfo(l))==0 then PickupContainerItem(b,s) DeleteCursorItem() ClearCursor() return end end end
+/cast Fishing
+```
+
+To stop throwing junk away, put the plain Fishing spell back on the button.
 
 ## The assistant (optional)
 

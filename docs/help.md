@@ -57,7 +57,12 @@ buttons or bars. If it still misses bites, open **More options** and lower **How
 **It paused and I did not touch the mouse.** Open **More options** and switch off **Let go when I move the
 mouse**.
 
-**It stopped with "no fish".** Usually your bags are full or the fishing key is wrong.
+**It stopped with "no fish".** Usually the fishing key is wrong, or the game is not zoomed all the way in with
+the buttons and bars hidden.
+
+**My bags filled up.** It cannot see your bags, and it does nothing with what is in them: it does not open,
+sort, sell or throw away anything. When the bags are full it keeps casting and clicking, but nothing more is
+kept. Make room before you start, and set a time limit under **More options** so it does not fish for nothing.
 
 **It makes my computer slow.** Open **More options** and choose **Watch the middle**. The bobber then has to
 land in the middle of the screen; **Take a look** shows the area as a blue box.

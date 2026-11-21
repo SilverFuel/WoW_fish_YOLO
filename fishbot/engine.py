@@ -227,9 +227,8 @@ class FishingBot:
 
         misses = self._settings.stop_after_misses
         if misses and self.stats.misses_in_a_row >= misses:
-            self._trip(f'Stopped: no fish in {misses} cast{"" if misses == 1 else "s"}. Check that your bags have room, '
-                       'that the fishing key is right, and that the game is zoomed all the way in with the '
-                       'buttons and bars hidden.')
+            self._trip(f'Stopped: no fish in {misses} cast{"" if misses == 1 else "s"}. Check that the fishing key is right, '
+                       'and that the game is zoomed all the way in with the buttons and bars hidden.')
             return True
 
         return False

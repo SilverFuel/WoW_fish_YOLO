@@ -61,7 +61,10 @@ How the bot works:
 
 Common problems:
 - Every cast misses: not in first-person view; interface not hidden; the bobber lands outside the scanned area
-  (use "full"); wrong fishing key; bags are full; confidence too high (try 0.7); cast_seconds shorter than the real cast.
+  (use "full"); wrong fishing key; confidence too high (try 0.7); cast_seconds shorter than the real cast.
+- Full bags: the bot cannot see the bags and does nothing with what is in them. When they are full it keeps
+  casting and clicking, but nothing more is kept, and "Caught" keeps counting. Advise emptying the bags first and
+  setting stop_after_minutes.
 - Nothing happens: the game is not the window in front; on macOS the Accessibility permission is missing;
   on Windows the game runs as administrator and the bot does not.
 - The preview is black on macOS: the Screen Recording permission is missing.

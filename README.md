@@ -25,7 +25,7 @@ If your computer will not open the starter, see [Help](docs/help.md).
 ## On the page
 
 1. **Get the game ready.** Zoom all the way in, face the water, hide the buttons and bars (`Alt`+`Z`),
-   and switch on Auto Loot in the game's settings.
+   switch on Auto Loot in the game's settings, and make room in your bags.
 2. **Pick your fishing key.** That is the key you press in the game to cast.
 3. Press **Start fishing**.
 

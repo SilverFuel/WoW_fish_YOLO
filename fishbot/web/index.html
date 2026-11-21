@@ -18,296 +18,232 @@
     </svg>
     <span>WoW Fish YOLO</span>
   </div>
-  <div class="top-right">
-    <span id="platform" class="chip"></span>
-    <button id="quit" class="button ghost small" type="button">Quit app</button>
-  </div>
+  <button id="quit" class="link" type="button">Quit</button>
 </header>
 
-<div id="demo-banner" class="banner" hidden>Demo mode: this is a simulated game. No keys or clicks are sent and your screen is not captured.</div>
-<div id="offline" class="banner bad" hidden>The app is not running. Start it again, then reload this page.</div>
+<div id="demo-banner" class="banner" hidden>Demo: this is a pretend game. Nothing is pressed or clicked on your computer.</div>
+<div id="offline" class="banner bad" hidden>WoW Fish YOLO is not running. Start it again, then reload this page.</div>
 
-<main class="layout">
-  <div class="column">
+<main>
 
-    <section class="card status-card" aria-labelledby="status-title">
-      <div class="status-head">
-        <span id="status-dot" class="dot idle" aria-hidden="true"></span>
-        <div>
-          <h1 id="status-title" aria-live="polite">Loading…</h1>
-          <p id="status-detail" class="muted"></p>
-        </div>
+  <!-- The one thing most people come here to do. -->
+  <section class="card main" aria-labelledby="status-title">
+    <div class="status">
+      <span id="status-dot" class="dot idle" aria-hidden="true"></span>
+      <div>
+        <h1 id="status-title" aria-live="polite">Loading…</h1>
+        <p id="status-detail"></p>
       </div>
+    </div>
 
-      <ul id="problems" class="problems" hidden></ul>
+    <div id="recovery" class="recovery" hidden>
+      <strong>It stopped on its own. Nothing more is being pressed or clicked.</strong>
+      <ol>
+        <li>Look at the game. If a window popped up, close it with Esc.</li>
+        <li id="recovery-clicks">Open <a href="#clicks-block">What it clicked</a> below to see what it took for a bite.</li>
+        <li>Next time, press <b>Practice first</b>: it only watches, so you can see what it would do.</li>
+      </ol>
+    </div>
 
-      <div id="recovery" class="recovery" hidden>
-        <strong>The bot stopped itself and is sending nothing. Before you start again:</strong>
-        <ol>
-          <li>Look at the game. If a window opened or something got targeted, close or clear it with Esc.</li>
-          <li>Open <a href="#clicks-title">Recent clicks</a> to see exactly what the bot clicked.</li>
-          <li>Fix the cause, then run <a href="#practice_mode">Practice mode</a> first: it shows what the bot would click without pressing or clicking anything.</li>
-        </ol>
-      </div>
+    <div class="actions">
+      <button id="start" class="button primary" type="button">Start fishing</button>
+      <button id="pause" class="button" type="button" hidden>Pause</button>
+      <button id="stop" class="button danger" type="button" hidden>Stop</button>
+    </div>
+    <p id="start-problem" class="problem" hidden></p>
+    <p id="practice-line" class="quiet">
+      First time? <button id="practice" class="link" type="button">Practice first</button>.
+      It only watches and never presses or clicks.
+    </p>
 
-      <div class="actions">
-        <button id="start" class="button primary large" type="button">Start fishing</button>
-        <button id="pause" class="button large" type="button" hidden>Pause</button>
-        <button id="stop" class="button danger large" type="button" hidden>Stop</button>
-      </div>
-      <p class="hint">
-        Inside the game: <kbd id="hint-pause">F8</kbd> pauses, <kbd id="hint-stop">F9</kbd> stops<span id="hint-mouse">, and moving the mouse makes the bot let go</span>.
-        The bot only presses keys and clicks while the game is the window in front.
-      </p>
+    <dl class="stats">
+      <div><dt id="stat-looted-label">Caught</dt><dd id="stat-looted">0</dd></div>
+      <div><dt>No bite</dt><dd id="stat-missed">0</dd></div>
+      <div><dt>Time</dt><dd id="stat-time">0:00</dd></div>
+    </dl>
+    <p class="quiet">
+      In the game: <kbd id="hint-pause">F8</kbd> pauses and <kbd id="hint-stop">F9</kbd> stops<span id="hint-mouse">, or just move the mouse</span>.
+    </p>
+  </section>
 
-      <dl class="stats">
-        <div><dt>Casts</dt><dd id="stat-casts">0</dd></div>
-        <div><dt id="stat-looted-label">Caught</dt><dd id="stat-looted">0</dd></div>
-        <div><dt>Missed</dt><dd id="stat-missed">0</dd></div>
-        <div><dt>Time</dt><dd id="stat-time">0:00</dd></div>
-        <div><dt>Per look</dt><dd id="stat-speed">–</dd></div>
-      </dl>
-    </section>
-
-    <section class="card" aria-labelledby="preview-title">
-      <div class="card-head">
-        <h2 id="preview-title">What the bot sees</h2>
-        <button id="check" class="button small" type="button">Check now</button>
-      </div>
-      <div class="preview-frame">
-        <img id="preview" alt="The latest picture the bot took of the game" hidden>
-        <p id="preview-empty" class="muted">No picture yet. Press <strong>Check now</strong> with the game open: it comes to the front for a moment, then switch back here to see the result.</p>
-      </div>
-      <p id="check-message" class="note" hidden></p>
-      <div class="score">
-        <label for="score-meter">Closest match</label>
-        <meter id="score-meter" min="0" max="1" value="0"></meter>
-        <span id="score-text" class="muted">–</span>
-      </div>
-      <p class="hint">Green box: a splash the bot would loot. Orange box: its best guess, not confident enough or not plausible. Blue outline: the area it scans.</p>
-
-      <div id="clicks-block" hidden>
-        <h3 id="clicks-title">Recent clicks</h3>
-        <p class="help">What the bot saw each time it clicked, newest first. Select one to enlarge it.</p>
-        <ol id="clicks" class="clicks"></ol>
-      </div>
-    </section>
-
-    <dialog id="click-dialog" aria-labelledby="click-caption">
-      <img id="click-picture" alt="The picture the bot acted on, with the box it clicked">
-      <p id="click-caption"></p>
-      <form method="dialog"><button class="button" type="submit">Close</button></form>
-    </dialog>
-
-    <section class="card" aria-labelledby="log-title">
-      <h2 id="log-title">Activity</h2>
-      <ol id="log" class="log" aria-live="off"></ol>
-    </section>
-
-  </div>
-  <div class="column">
-
-    <section class="card" aria-labelledby="settings-title">
-      <div class="card-head">
-        <h2 id="settings-title">Settings</h2>
-        <span id="saved" class="saved" role="status"></span>
-      </div>
-      <p id="settings-locked" class="note" hidden>Stop the bot to change these. Changes apply the next time you start.</p>
-
-      <fieldset id="bot-settings">
-        <legend class="visually-hidden">Bot settings</legend>
-
-        <h3>Keys</h3>
-        <div class="field">
-          <div class="field-text">
-            <span class="label" id="label-fishing_key">Fishing key</span>
-            <span class="help">The key your Fishing spell is bound to in the game.</span>
+  <!-- Three steps, once. -->
+  <section class="card" aria-labelledby="setup-title">
+    <h2 id="setup-title">Set up</h2>
+    <p id="setup-locked" class="note" hidden>Stop first to change these.</p>
+    <fieldset id="setup">
+      <legend class="visually-hidden">Set up</legend>
+      <ol class="steps">
+        <li>
+          <h3>Get the game ready</h3>
+          <div class="ready">
+            <img src="/ready.jpg" width="640" height="360" alt="The game zoomed all the way in, looking at open water, with no buttons or bars on screen">
+            <ul>
+              <li>Zoom all the way in and face the water.</li>
+              <li>Hide the buttons and bars: press <kbd>Alt</kbd>+<kbd>Z</kbd>.</li>
+              <li>Switch on <b>Auto Loot</b> in the game's settings.</li>
+            </ul>
           </div>
-          <button class="keycap" type="button" data-key-setting="fishing_key" aria-labelledby="label-fishing_key">Not set</button>
-        </div>
-        <p class="field-error" data-error-for="fishing_key"></p>
-
-        <div class="field">
-          <div class="field-text">
-            <label class="label" for="lure_enabled">Use a lure</label>
-            <span class="help">Re-applies it when it runs out.</span>
+          <ul id="platform-notes" class="small-print"></ul>
+        </li>
+        <li>
+          <h3>Pick your fishing key</h3>
+          <div class="row">
+            <p>The key you press in the game to cast.</p>
+            <button class="keycap" type="button" data-key-setting="fishing_key" aria-label="Fishing key">Choose a key</button>
           </div>
-          <input class="switch" type="checkbox" id="lure_enabled" data-setting="lure_enabled">
-        </div>
-        <div id="lure-options" hidden>
-          <div class="field">
-            <div class="field-text"><span class="label" id="label-lure_key">Lure key</span></div>
-            <button class="keycap" type="button" data-key-setting="lure_key" aria-labelledby="label-lure_key">Not set</button>
+          <p class="field-error" data-error-for="fishing_key"></p>
+        </li>
+        <li>
+          <h3>Using a lure? <span class="optional">optional</span></h3>
+          <div class="row">
+            <label for="lure_enabled">Put a new lure on when the old one runs out.</label>
+            <input class="switch" type="checkbox" id="lure_enabled" data-setting="lure_enabled">
           </div>
-          <p class="field-error" data-error-for="lure_key"></p>
-          <div class="field">
-            <div class="field-text"><label class="label" for="lure_minutes">Lure lasts</label></div>
-            <span class="with-unit"><input type="number" id="lure_minutes" data-setting="lure_minutes" min="1" max="240" inputmode="numeric"> minutes</span>
-          </div>
-          <p class="field-error" data-error-for="lure_minutes"></p>
-        </div>
-
-        <h3>Performance</h3>
-        <div class="field stacked">
-          <div class="field-text">
-            <span class="label" id="label-scan_area">Area to scan</span>
-            <span class="help">A smaller area uses much less CPU. Use <strong>Check now</strong> to confirm the bobber lands inside it.</span>
-          </div>
-          <div class="segmented" role="radiogroup" aria-labelledby="label-scan_area">
-            <label><input type="radio" name="scan_area" value="full" data-setting="scan_area"><span>Whole window<small>most reliable</small></span></label>
-            <label><input type="radio" name="scan_area" value="center75" data-setting="scan_area"><span>Middle 75%<small>about half the CPU</small></span></label>
-            <label><input type="radio" name="scan_area" value="center50" data-setting="scan_area"><span>Middle 50%<small>about a quarter</small></span></label>
-          </div>
-        </div>
-        <p class="field-error" data-error-for="scan_area"></p>
-
-        <div class="field stacked">
-          <div class="field-text">
-            <label class="label" for="checks_per_second">Looks per second: <output id="checks-value" for="checks_per_second">5</output></label>
-            <span class="help">How often it checks for the splash. 4 to 6 is plenty; lower saves CPU.</span>
-          </div>
-          <input type="range" id="checks_per_second" data-setting="checks_per_second" min="1" max="15" step="1">
-        </div>
-        <p class="field-error" data-error-for="checks_per_second"></p>
-
-        <div class="field">
-          <div class="field-text">
-            <label class="label" for="cpu_threads">CPU threads</label>
-            <span class="help">More threads look faster but leave less for the game.</span>
-          </div>
-          <select id="cpu_threads" data-setting="cpu_threads">
-            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
-            <option value="4">4</option><option value="6">6</option><option value="8">8</option>
-          </select>
-        </div>
-        <p class="field-error" data-error-for="cpu_threads"></p>
-
-        <h3>Safety</h3>
-        <div class="field">
-          <div class="field-text">
-            <label class="label" for="practice_mode">Practice mode</label>
-            <span class="help">Watch only. The bot shows what it would click without pressing or clicking anything; you cast in the game yourself. Use it for a first run, or after something went wrong.</span>
-          </div>
-          <input class="switch" type="checkbox" id="practice_mode" data-setting="practice_mode">
-        </div>
-        <div class="field">
-          <div class="field-text">
-            <label class="label" for="pause_on_mouse_move">Pause when I move the mouse</label>
-            <span class="help">Take the mouse and the bot lets go at once. It continues when you press Resume or the pause key.</span>
-          </div>
-          <input class="switch" type="checkbox" id="pause_on_mouse_move" data-setting="pause_on_mouse_move">
-        </div>
-        <div class="field">
-          <div class="field-text">
-            <label class="label" for="stop_after_minutes">Time limit</label>
-            <span class="help">0 means no limit.</span>
-          </div>
-          <span class="with-unit"><input type="number" id="stop_after_minutes" data-setting="stop_after_minutes" min="0" max="1440" inputmode="numeric"> minutes</span>
-        </div>
-        <p class="field-error" data-error-for="stop_after_minutes"></p>
-        <div class="field">
-          <div class="field-text">
-            <label class="label" for="stop_after_misses">Missed casts</label>
-            <span class="help">Stops after this many in a row, which usually means full bags or a wrong key. 0 turns this off.</span>
-          </div>
-          <span class="with-unit"><input type="number" id="stop_after_misses" data-setting="stop_after_misses" min="0" max="100" inputmode="numeric"> in a row</span>
-        </div>
-        <p class="field-error" data-error-for="stop_after_misses"></p>
-
-        <details>
-          <summary>Advanced</summary>
-          <div class="field">
-            <div class="field-text">
-              <label class="label" for="cast_seconds">Cast time</label>
-              <span class="help">How long to wait for a bite before casting again.</span>
+          <div id="lure-options" hidden>
+            <div class="row">
+              <p>The key your lure is on.</p>
+              <button class="keycap" type="button" data-key-setting="lure_key" aria-label="Lure key">Choose a key</button>
             </div>
-            <span class="with-unit"><input type="number" id="cast_seconds" data-setting="cast_seconds" min="5" max="60" inputmode="numeric"> seconds</span>
-          </div>
-          <p class="field-error" data-error-for="cast_seconds"></p>
-          <div class="field">
-            <div class="field-text">
-              <label class="label" for="confidence">Confidence needed</label>
-              <span class="help">How sure it must be that it sees a splash. 80 is the tested value.</span>
+            <p class="field-error" data-error-for="lure_key"></p>
+            <div class="row">
+              <label for="lure_minutes">A lure lasts</label>
+              <span class="with-unit"><input type="number" id="lure_minutes" data-setting="lure_minutes" min="1" max="240" inputmode="numeric"> minutes</span>
             </div>
-            <span class="with-unit"><input type="number" id="confidence" data-setting="confidence" data-percent min="50" max="95" inputmode="numeric"> %</span>
+            <p class="field-error" data-error-for="lure_minutes"></p>
           </div>
-          <p class="field-error" data-error-for="confidence"></p>
-          <div class="field">
-            <div class="field-text"><label class="label" for="pause_hotkey">Pause key</label></div>
-            <select id="pause_hotkey" data-setting="pause_hotkey" data-hotkeys></select>
-          </div>
-          <p class="field-error" data-error-for="pause_hotkey"></p>
-          <div class="field">
-            <div class="field-text"><label class="label" for="stop_hotkey">Stop key</label></div>
-            <select id="stop_hotkey" data-setting="stop_hotkey" data-hotkeys></select>
-          </div>
-          <p class="field-error" data-error-for="stop_hotkey"></p>
-        </details>
-      </fieldset>
-    </section>
+        </li>
+      </ol>
+    </fieldset>
+  </section>
 
-    <section class="card" aria-labelledby="setup-title">
-      <h2 id="setup-title">Before you start</h2>
-      <ul class="checklist">
-        <li>Turn on <strong>Auto Loot</strong> in the game's settings.</li>
-        <li>Zoom in to <strong>first-person view</strong> and face open water.</li>
-        <li><strong>Hide the interface</strong> (Alt+Z).</li>
-      </ul>
-      <ul id="platform-notes" class="checklist system"></ul>
-    </section>
+  <section class="card" aria-labelledby="preview-title">
+    <div class="card-head">
+      <h2 id="preview-title">What it sees</h2>
+      <button id="check" class="button small" type="button">Take a look</button>
+    </div>
+    <p id="preview-empty" class="quiet">Not sure it is looking at the right thing? Press <b>Take a look</b> with the game open. The game jumps to the front for a moment; then come back here.</p>
+    <div id="preview-frame" class="preview-frame" hidden>
+      <img id="preview" alt="The latest picture it took of the game">
+    </div>
+    <p id="check-message" class="note" hidden></p>
+    <p id="preview-key" class="quiet" hidden>A green box is a bite it would click. An orange box is something it is not sure about.</p>
+  </section>
 
-    <section class="card" aria-labelledby="assistant-title">
-      <div class="card-head">
-        <h2 id="assistant-title">Assistant <span class="chip subtle">optional</span></h2>
-        <input class="switch" type="checkbox" id="assistant_enabled" data-setting="assistant_enabled" aria-label="Turn the assistant on">
+  <details class="card" id="clicks-block" hidden>
+    <summary>What it clicked <span id="clicks-count" class="count"></span></summary>
+    <p class="quiet">The picture it was looking at each time it clicked, newest first. Tap one to see it bigger.</p>
+    <ol id="clicks" class="clicks"></ol>
+  </details>
+
+  <details class="card" id="more">
+    <summary>More options</summary>
+    <p class="quiet">You can leave all of these alone.</p>
+    <p id="more-locked" class="note" hidden>Stop first to change these.</p>
+    <fieldset id="more-settings">
+      <legend class="visually-hidden">More options</legend>
+
+      <h3>Go easier on my computer</h3>
+      <div class="choices" role="radiogroup" aria-label="How much of the game it watches">
+        <label><input type="radio" name="scan_area" value="full" data-setting="scan_area"><span><b>Watch the whole game</b><small>Works everywhere</small></span></label>
+        <label><input type="radio" name="scan_area" value="center75" data-setting="scan_area"><span><b>Watch the middle</b><small>Lighter</small></span></label>
+        <label><input type="radio" name="scan_area" value="center50" data-setting="scan_area"><span><b>Watch a small middle</b><small>Lightest</small></span></label>
       </div>
-      <p class="hint">
-        Uses a language model running on your own computer to explain settings, troubleshoot and suggest changes.
-        It can only suggest: nothing changes until you press Apply, and it never touches the game.
-      </p>
-      <div id="assistant-body" hidden>
-        <div class="field stacked">
-          <div class="field-text">
-            <label class="label" for="assistant_url">Server</label>
-            <span class="help">Ollama: http://localhost:11434/v1 · LM Studio: http://localhost:1234/v1</span>
-          </div>
-          <input type="text" id="assistant_url" data-setting="assistant_url" spellcheck="false" autocomplete="off">
-        </div>
-        <p class="field-error" data-error-for="assistant_url"></p>
-        <div class="field stacked">
-          <div class="field-text">
-            <label class="label" for="assistant_model">Model</label>
-            <span class="help">For example qwen3:8b</span>
-          </div>
-          <input type="text" id="assistant_model" data-setting="assistant_model" spellcheck="false" autocomplete="off" list="assistant-models">
-          <datalist id="assistant-models"></datalist>
-        </div>
-        <p class="field-error" data-error-for="assistant_model"></p>
-        <div class="assistant-test">
-          <button id="assistant-test" class="button small" type="button">Test connection</button>
-          <span id="assistant-test-result" class="muted" role="status"></span>
-        </div>
+      <p class="quiet">With the lighter choices the bobber has to land in the middle. <b>Take a look</b> shows the area as a blue box.</p>
+      <p class="field-error" data-error-for="scan_area"></p>
 
-        <ol id="chat" class="chat" aria-live="polite"></ol>
-        <div id="suggestions" class="suggestions">
-          <button class="chip-button" type="button">Set me up: fishing is on 1, my lure is on 2 and lasts 10 minutes</button>
-          <button class="chip-button" type="button">It keeps missing fish. What should I check?</button>
-          <button class="chip-button" type="button">Make it use less CPU</button>
-        </div>
-        <form id="chat-form" class="chat-form">
-          <label class="visually-hidden" for="chat-input">Message for the assistant</label>
-          <textarea id="chat-input" rows="2" maxlength="4000" placeholder="Ask a question or describe how you want to fish"></textarea>
-          <button id="chat-send" class="button primary" type="submit">Send</button>
-        </form>
+      <h3>Stop on its own</h3>
+      <div class="row">
+        <label for="stop_after_minutes">After this long <small>0 means keep going until I stop it</small></label>
+        <span class="with-unit"><input type="number" id="stop_after_minutes" data-setting="stop_after_minutes" min="0" max="1440" inputmode="numeric"> minutes</span>
       </div>
-    </section>
+      <p class="field-error" data-error-for="stop_after_minutes"></p>
+      <div class="row">
+        <label for="stop_after_misses">After this many casts with no fish <small>Usually full bags or the wrong key. 0 means never.</small></label>
+        <span class="with-unit"><input type="number" id="stop_after_misses" data-setting="stop_after_misses" min="0" max="100" inputmode="numeric"> casts</span>
+      </div>
+      <p class="field-error" data-error-for="stop_after_misses"></p>
+      <div class="row">
+        <label for="pause_on_mouse_move">Let go when I move the mouse <small>Move the mouse and it pauses until you press Resume.</small></label>
+        <input class="switch" type="checkbox" id="pause_on_mouse_move" data-setting="pause_on_mouse_move">
+      </div>
 
-  </div>
+      <h3>Keys in the game</h3>
+      <div class="row">
+        <label for="pause_hotkey">Pause</label>
+        <select id="pause_hotkey" data-setting="pause_hotkey" data-hotkeys></select>
+      </div>
+      <p class="field-error" data-error-for="pause_hotkey"></p>
+      <div class="row">
+        <label for="stop_hotkey">Stop</label>
+        <select id="stop_hotkey" data-setting="stop_hotkey" data-hotkeys></select>
+      </div>
+      <p class="field-error" data-error-for="stop_hotkey"></p>
+
+      <h3>Fine tuning</h3>
+      <div class="row">
+        <label for="cast_seconds">Wait for a bite <small>How long before it casts again.</small></label>
+        <span class="with-unit"><input type="number" id="cast_seconds" data-setting="cast_seconds" min="5" max="60" inputmode="numeric"> seconds</span>
+      </div>
+      <p class="field-error" data-error-for="cast_seconds"></p>
+      <div class="row">
+        <label for="confidence">How sure it must be <small>Lower it a little if it keeps missing bites.</small></label>
+        <span class="with-unit"><input type="number" id="confidence" data-setting="confidence" data-percent min="50" max="95" inputmode="numeric"> %</span>
+      </div>
+      <p class="field-error" data-error-for="confidence"></p>
+    </fieldset>
+
+    <h3>Ask the assistant <span class="optional">optional</span></h3>
+    <div class="row">
+      <label for="assistant_enabled">A helper that runs on your own computer. <small>It can explain things and suggest settings. It never touches the game.</small></label>
+      <input class="switch" type="checkbox" id="assistant_enabled" data-setting="assistant_enabled">
+    </div>
+    <div id="assistant-body" hidden>
+      <div class="row stacked">
+        <label for="assistant_url">Where it runs <small>Ollama: http://localhost:11434/v1 · LM Studio: http://localhost:1234/v1</small></label>
+        <input type="text" id="assistant_url" data-setting="assistant_url" spellcheck="false" autocomplete="off">
+      </div>
+      <p class="field-error" data-error-for="assistant_url"></p>
+      <div class="row stacked">
+        <label for="assistant_model">Which model <small>For example qwen3:8b</small></label>
+        <input type="text" id="assistant_model" data-setting="assistant_model" spellcheck="false" autocomplete="off" list="assistant-models">
+        <datalist id="assistant-models"></datalist>
+      </div>
+      <p class="field-error" data-error-for="assistant_model"></p>
+      <div class="assistant-test">
+        <button id="assistant-test" class="button small" type="button">Check the connection</button>
+        <span id="assistant-test-result" role="status"></span>
+      </div>
+
+      <ol id="chat" class="chat" aria-live="polite"></ol>
+      <div id="suggestions" class="suggestions">
+        <button class="chip-button" type="button">Set me up: fishing is on 1, my lure is on 2 and lasts 10 minutes</button>
+        <button class="chip-button" type="button">It keeps missing fish. What should I check?</button>
+        <button class="chip-button" type="button">Make it use less of my computer</button>
+      </div>
+      <form id="chat-form" class="chat-form">
+        <label class="visually-hidden" for="chat-input">Your question</label>
+        <textarea id="chat-input" rows="2" maxlength="4000" placeholder="Ask a question, or say how you want to fish"></textarea>
+        <button id="chat-send" class="button primary" type="submit">Send</button>
+      </form>
+    </div>
+  </details>
+
+  <details class="card" id="activity">
+    <summary>What it has been doing</summary>
+    <ol id="log" class="log" aria-live="off"></ol>
+  </details>
+
 </main>
 
+<dialog id="click-dialog" aria-labelledby="click-caption">
+  <img id="click-picture" alt="The picture it was looking at, with a box around what it clicked">
+  <p id="click-caption"></p>
+  <form method="dialog"><button class="button" type="submit">Close</button></form>
+</dialog>
+
 <footer class="foot">
+  <span>Using a bot is against Blizzard's rules and can get an account closed. Use it at your own risk.</span>
   <span id="version"></span>
-  <span>Automating gameplay is against Blizzard's terms of service. Use at your own risk.</span>
 </footer>
 
 <script src="/app.js" defer></script>

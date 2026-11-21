@@ -85,8 +85,9 @@ class FishingBot:
     """
 
     def __init__(self, settings, window, vision, controls, clock=time.monotonic, idle=time.sleep, log=print,
-                 on_click=None):
+                 on_click=None, practice=False):
         self._settings = settings
+        self._practice = practice  # watch only: nothing is pressed or clicked
         self._window = window
         self._vision = vision
         self._controls = controls
@@ -158,8 +159,8 @@ class FishingBot:
         self._started = self._clock()
 
         try:
-            if self._settings.practice_mode:
-                # Nothing at all is sent in practice mode, not even the request to bring the game forward.
+            if self._practice:
+                # Nothing at all is sent in practice, not even the request to bring the game forward.
                 self._watch_only()
             else:
                 if not self._stop.is_set():
@@ -182,15 +183,13 @@ class FishingBot:
                 self.stats.missed += 1
                 self.stats.misses_in_a_row += 1
                 self._fast_in_a_row = 0
-                self._log('No fish caught. Check that you are in first-person view, the interface is '
-                          'hidden and the bobber is inside the scanned area.')
+                self._log('No bite on that cast.')
 
             self._sleep(random.randrange(0, 3))
 
     def _watch_only(self):
         """Practice mode: look for the splash and say what would be clicked, without any input."""
-        self._log('Practice mode: watching only. Cast in the game yourself; the bot reports what it would '
-                  'click and sends nothing.')
+        self._log('Practice: watching only. Cast in the game yourself. Nothing is pressed or clicked.')
         frame_interval = 1 / self._settings.checks_per_second
 
         while self._wait_until_ready():
@@ -209,8 +208,7 @@ class FishingBot:
             if position is not None:
                 self.stats.practice_clicks += 1
                 self._record_click(*position, practice=True)
-                self._log(f'Practice: would right-click at x: {position[0]}, y: {position[1]} '
-                          f'({self.stats.practice_clicks} so far).')
+                self._log(f'Practice: it would have clicked the bobber now ({self.stats.practice_clicks} so far).')
                 self._sleep(PRACTICE_PAUSE_SEC)
 
             self._sleep(frame_interval - (self._clock() - frame_started))
@@ -224,13 +222,14 @@ class FishingBot:
     def _limit_reached(self):
         minutes = self._settings.stop_after_minutes
         if minutes and self.elapsed_seconds() >= minutes * 60:
-            self.stop(f'Stopped: the {minutes} minute limit was reached.')
+            self.stop(f'Stopped: your {minutes} minute limit is up.')
             return True
 
         misses = self._settings.stop_after_misses
         if misses and self.stats.misses_in_a_row >= misses:
-            self._trip(f'Stopped: {misses} cast{"" if misses == 1 else "s"} in a row caught nothing. '
-                       'Check the bag space, the fishing key and what the bot sees.')
+            self._trip(f'Stopped: no fish in {misses} cast{"" if misses == 1 else "s"}. Check that your bags have room, '
+                       'that the fishing key is right, and that the game is zoomed all the way in with the '
+                       'buttons and bars hidden.')
             return True
 
         return False
@@ -242,15 +241,14 @@ class FishingBot:
             self._cast_times.popleft()
 
         if len(self._cast_times) >= CAST_BURST_COUNT:
-            self._trip(f'Stopped: the bot recast {CAST_BURST_COUNT} times in {CAST_BURST_SEC:g} seconds. '
-                       'Something keeps cutting the cast short, so it stopped rather than keep pressing the key.')
+            self._trip('Stopped: casting kept getting interrupted, so it stopped pressing the key. '
+                       'Check that nothing in the game is in the way.')
             return True
         return False
 
     def _screen_is_blank(self):
         if getattr(self._vision, 'blank_streak', 0) >= BLANK_LOOKS:
-            self._trip('Stopped: the game has shown a black screen for several seconds. That is a loading screen, '
-                       'a disconnect, or a display that is off.')
+            self._trip('Stopped: the game screen went black. That is usually a loading screen or a disconnect.')
             return True
         return False
 
@@ -258,9 +256,8 @@ class FishingBot:
         """Judge a sighting against the recent ones before clicking it. Trips the bot if they look wrong."""
         self._fast_in_a_row = self._fast_in_a_row + 1 if seconds_since_cast < TOO_FAST_SEC else 0
         if self._fast_in_a_row >= TOO_FAST_STREAK:
-            self._trip(f'Stopped: {TOO_FAST_STREAK} times in a row the bot saw a splash within {TOO_FAST_SEC:g} seconds '
-                       'of casting. A real bite takes longer, so it is probably looking at something else. '
-                       'Recent clicks shows what it clicked.')
+            self._trip('Stopped: it kept seeing a bite the moment it cast, which a real fish never does. '
+                       'Something else on screen is fooling it. "What it clicked" shows what.')
             return True
 
         # Real catches in between do not hide a spot that keeps coming back, so this looks at the
@@ -269,9 +266,8 @@ class FishingBot:
         self._spots.append(spot)
         here = sum(1 for earlier in self._spots if not _far_apart(earlier, spot, tolerance))
         if here >= SAME_SPOT_COUNT:
-            self._trip(f'Stopped: {here} of the last {len(self._spots)} catches were on exactly the same spot. The bobber '
-                       'lands somewhere new on every cast, so the bot is probably clicking something that is not '
-                       'the bobber. Recent clicks shows what it clicked.')
+            self._trip('Stopped: it kept clicking the very same spot, and a bobber never lands twice in the same place. '
+                       'Something else on screen is fooling it. "What it clicked" shows what.')
             return True
 
         return False
@@ -295,7 +291,7 @@ class FishingBot:
             return False
 
         self._paused_itself_at = self._clock()
-        self.set_paused(True, 'Paused: you moved the mouse, so the bot let go. Resume when you want it to continue.')
+        self.set_paused(True, 'Paused because you moved the mouse. Press Resume when you are ready.')
         return True
 
     def _require_still_mouse(self):
@@ -323,7 +319,7 @@ class FishingBot:
         """Whether the game window is no longer where it was when the splash was seen there."""
         if self._window.capture_region() == region:
             return False
-        self._log('The game window moved or changed size after the splash was seen, so the click was dropped.')
+        self._log('The game window moved, so that click was skipped.')
         return True
 
     def _record_click(self, x, y, practice):
@@ -332,19 +328,19 @@ class FishingBot:
         try:
             self._on_click(x, y, practice)
         except Exception as error:  # keeping a record must never get in the way of fishing or stopping
-            self._log(f'The click could not be recorded ({error}).')
+            self._log(f'Could not save a picture of that click ({error}).')
 
     # ----- waiting and acting -----
 
     def _wait_until_ready(self):
         """Block until input may be sent. Returns False once the bot should shut down."""
         announced = False
-        practice = self._settings.practice_mode
+        practice = self._practice
         waiting_for_mouse_since = None
 
         while not self._stop.is_set():
             if not self._window.exists():
-                self.stop('Stopped: the game window was closed.')
+                self.stop('Stopped: the game was closed.')
                 return False
 
             if self._paused.is_set():
@@ -359,14 +355,14 @@ class FishingBot:
                 if waiting_for_mouse_since is None:
                     waiting_for_mouse_since = self._clock()
                 elif waiting_for_mouse_since is not False and self._clock() - waiting_for_mouse_since >= MENTION_MOUSE_AFTER_SEC:
-                    self._log('Waiting for the mouse to be still before sending anything.')
+                    self._log('Waiting for you to let go of the mouse.')
                     waiting_for_mouse_since = False  # said once
             else:
                 self.state = WAITING
                 self._require_still_mouse()
                 waiting_for_mouse_since = None
                 if not announced:
-                    self._log('Waiting for the game window to be in front. Nothing is sent to other windows.')
+                    self._log('Waiting for the game to be the window in front. Nothing is pressed until it is.')
                     announced = True
 
             self._idle(POLL_INTERVAL_SEC)
@@ -406,7 +402,7 @@ class FishingBot:
 
         if self._press(settings.lure_key):
             self._last_lure = now
-            self._log(f'Applied the lure ({settings.lure_key} key) for {settings.lure_minutes} minutes.')
+            self._log(f'Put on a lure. The next one is due in {settings.lure_minutes} minutes.')
             self._sleep(LURE_APPLY_WAIT_SEC)
 
     def _cast(self):
@@ -416,7 +412,7 @@ class FishingBot:
         cast_started = self._clock()
         self._cast_times.append(cast_started)
         self.stats.casts += 1
-        self._log(f'Cast {self.stats.casts}: waiting for a fish...')
+        self._log(f'Cast {self.stats.casts}. Waiting for a bite...')
 
         frame_interval = 1 / self._settings.checks_per_second
         deadline = cast_started + self._settings.cast_seconds
@@ -443,7 +439,7 @@ class FishingBot:
 
             ignored = getattr(getattr(self._vision, 'last', None), 'note', '')
             if ignored and not mentioned_ignored:
-                self._log(f'Ignored something that looked like a splash: it was {ignored}.')
+                self._log(f'Ignored something that looked like a bite ({ignored}).')
                 mentioned_ignored = True
 
             if position is not None:
@@ -476,6 +472,6 @@ class FishingBot:
 
         self.stats.looted += 1
         self.stats.misses_in_a_row = 0
-        self._log(f'Splash at x: {x}, y: {y} - looted ({self.stats.looted} this session).')
+        self._log(f'Got a bite and clicked the bobber ({self.stats.looted} so far).')
         self._record_click(x, y, practice=False)
         return True

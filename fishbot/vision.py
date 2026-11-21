@@ -107,10 +107,10 @@ def implausible(position, box, region):
 
     if not (EDGE_MARGIN * width <= x <= (1 - EDGE_MARGIN) * width
             and EDGE_MARGIN * height <= y <= (1 - EDGE_MARGIN) * height):
-        return 'at the edge of the window, where the bobber does not land'
+        return 'too close to the edge of the game window'
     if not (SMALLEST_BOX * width <= box[0] <= LARGEST_BOX * width
             and SMALLEST_BOX * height <= box[1] <= LARGEST_BOX * height):
-        return 'the wrong size for a splash'
+        return 'the wrong size for a bobber splash'
     return ''
 
 

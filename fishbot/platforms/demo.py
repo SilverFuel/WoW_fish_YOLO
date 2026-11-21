@@ -13,7 +13,7 @@ import numpy as np
 
 SYSTEM = 'demo'
 LABEL = 'Demo (simulated game)'
-SETUP_NOTES = ['Demo mode: no keys or clicks are sent and the screen is not captured.']
+SETUP_NOTES = []
 
 ASSETS = Path(__file__).resolve().parent.parent / 'assets'
 REGION = {'left': 0, 'top': 0, 'width': 640, 'height': 360}

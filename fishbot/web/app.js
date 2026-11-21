@@ -5,17 +5,18 @@
 const token = document.querySelector('meta[name="fishbot-token"]').content;
 const $ = (id) => document.getElementById(id);
 
+// What the big line at the top says, and the sentence under it.
 const STATUS = {
   idle: ['Ready', 'Open the game, then press Start fishing.'],
-  starting: ['Starting…', 'Loading the model.'],
-  waiting: ['Waiting for the game', 'Click on the game window. Nothing is sent to other windows.'],
-  fishing: ['Fishing', 'Watching for the splash.'],
-  practice: ['Practice mode', 'Watching only. Cast in the game yourself; nothing is pressed or clicked.'],
-  paused: ['Paused', 'Press Resume here, or the pause key in the game.'],
+  starting: ['Getting ready…', ''],
+  waiting: ['Waiting for the game', 'Click on the game so it is the window in front. Nothing is pressed until it is.'],
+  fishing: ['Fishing', 'Watching for a bite.'],
+  practice: ['Practice', 'Watching only. Cast in the game yourself. Nothing is pressed or clicked.'],
+  paused: ['Paused', 'Press Resume when you are ready.'],
   stopped: ['Stopping…', ''],
 };
-const SCAN_NAMES = { full: 'Whole window', center75: 'Middle 75%', center50: 'Middle 50%' };
-const LIVE_PREVIEW_MS = 1400;
+const WATCH_NAMES = { full: 'the whole game', center75: 'the middle', center50: 'a small middle' };
+const LIVE_PICTURE_MS = 1400;
 const MAX_LOG_LINES = 200;
 const CHAT_MESSAGES_SENT = 12;
 const CHAT_MESSAGE_CHARS = 4000;
@@ -25,10 +26,9 @@ let cursor = 0;
 let lastLogId = 0;
 let listening = null;
 let startProblems = [];
-let previewTag = '';
-let previewUrl = null;
-let previewAt = 0;
-let savedTimer = null;
+let pictureTag = '';
+let pictureUrl = null;
+let pictureAt = 0;
 let closed = false;
 let clicksShown = '';
 const clickPictures = new Map(); // click id -> object URL of its picture
@@ -49,12 +49,12 @@ async function api(path, body) {
     // an empty or non-JSON answer; the status code below decides
   }
   if (!response.ok) {
-    throw new Error(data.error || `The app answered with an error (${response.status}).`);
+    throw new Error(data.error || `Something went wrong (${response.status}).`);
   }
   return data;
 }
 
-// ----- formatting -----
+// ----- small helpers -----
 
 function keyLabel(name) {
   if (name === 'space') return 'Space';
@@ -70,27 +70,33 @@ function clock(seconds) {
   return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${rest}` : `${minutes}:${rest}`;
 }
 
+function timeOfDay(seconds) {
+  return new Date(seconds * 1000).toLocaleTimeString([], { hour12: false });
+}
+
 function settingText(name, value) {
   if (typeof value === 'boolean') return value ? 'on' : 'off';
   if (name === 'confidence') return `${Math.round(value * 100)}%`;
-  if (name === 'scan_area') return SCAN_NAMES[value] || value;
-  if (name.endsWith('_key') || name.endsWith('_hotkey')) return value ? keyLabel(value) : 'not set';
+  if (name === 'scan_area') return WATCH_NAMES[value] || value;
+  if (name.endsWith('_key') || name.endsWith('_hotkey')) return value ? keyLabel(value) : 'not chosen';
   return String(value);
 }
 
-// ----- rendering -----
+function listOf(texts) {
+  return texts.map((text) => {
+    const item = document.createElement('li');
+    item.textContent = text;
+    return item;
+  });
+}
+
+// ----- drawing the page -----
 
 function setUp(first) {
-  $('platform').textContent = first.platform.label;
   $('demo-banner').hidden = first.platform.system !== 'demo';
   $('version').textContent = `Version ${first.version}`;
-
-  const notes = $('platform-notes');
-  for (const note of first.platform.notes) {
-    const item = document.createElement('li');
-    item.textContent = note;
-    notes.append(item);
-  }
+  $('platform-notes').replaceChildren(...listOf(first.platform.notes));
+  $('platform-notes').hidden = first.platform.notes.length === 0;
 
   for (const select of document.querySelectorAll('[data-hotkeys]')) {
     for (const name of first.hotkeys) {
@@ -102,9 +108,9 @@ function setUp(first) {
   }
 }
 
-function syncSettings(settings) {
+function showSettings(settings) {
   for (const element of document.querySelectorAll('[data-setting]')) {
-    if (element === document.activeElement) continue; // do not fight the user's typing
+    if (element === document.activeElement) continue; // do not fight what the person is typing
     const value = settings[element.dataset.setting];
     if (element.type === 'checkbox') element.checked = value;
     else if (element.type === 'radio') element.checked = element.value === value;
@@ -115,69 +121,65 @@ function syncSettings(settings) {
   for (const button of document.querySelectorAll('[data-key-setting]')) {
     if (listening && listening.button === button) continue;
     const key = settings[button.dataset.keySetting];
-    button.textContent = key ? keyLabel(key) : 'Not set';
+    button.textContent = key ? keyLabel(key) : 'Choose a key';
     button.classList.toggle('unset', !key);
   }
 
   $('lure-options').hidden = !settings.lure_enabled;
   $('assistant-body').hidden = !settings.assistant_enabled;
-  $('checks-value').textContent = $('checks_per_second').value;
   $('hint-pause').textContent = keyLabel(settings.pause_hotkey);
   $('hint-stop').textContent = keyLabel(settings.stop_hotkey);
+  $('hint-mouse').hidden = !settings.pause_on_mouse_move;
 }
 
-function renderStatus() {
+function showStatus() {
+  const running = state.running;
   const [title, hint] = STATUS[state.state] || STATUS.idle;
-  $('status-title').textContent = title;
-  $('status-detail').textContent = state.state === 'idle' && state.message ? state.message : hint;
-  $('status-dot').className = `dot ${state.state}`;
+  const stoppedItself = !running && state.stopped_by_safeguard;
+  let detail = hint;
+  if (state.state === 'idle') {
+    if (state.message) detail = state.message;
+    else if (!state.settings.fishing_key) detail = 'Three quick steps below, then press Start fishing.';
+  }
 
-  const problems = state.running ? [] : [...state.problems, ...startProblems];
-  const list = $('problems');
-  list.replaceChildren(...problems.map((text) => {
-    const item = document.createElement('li');
-    item.textContent = text;
-    return item;
-  }));
-  list.hidden = problems.length === 0;
-
-  // A stop the bot decided on itself needs the user's attention, wherever they are looking.
-  const stoppedItself = !state.running && state.stopped_by_safeguard;
+  // When it stops itself the page says so in the title, rather than a calm "Ready".
+  const shownTitle = stoppedItself ? 'Stopped' : title;
+  if (stoppedItself && detail.startsWith('Stopped: ')) {
+    detail = detail.charAt(9).toUpperCase() + detail.slice(10); // the heading already says Stopped
+  }
+  $('status-title').textContent = shownTitle;
+  $('status-detail').textContent = detail;
+  $('status-dot').className = `dot ${stoppedItself ? 'stopped-itself' : state.state}`;
   $('recovery').hidden = !stoppedItself;
-  document.title = `${stoppedItself ? 'Stopped itself' : title} – WoW Fish YOLO`;
+  $('recovery-clicks').hidden = (state.clicks || []).length === 0;
+  document.title = `${shownTitle} – WoW Fish YOLO`;
 
-  const practice = state.settings.practice_mode;
-  $('start').textContent = practice ? 'Start practice' : 'Start fishing';
-  $('stat-looted-label').textContent = practice ? 'Would click' : 'Caught';
-  $('hint-mouse').hidden = !state.settings.pause_on_mouse_move;
-
-  $('start').hidden = state.running;
-  $('start').disabled = state.problems.length > 0;
-  $('pause').hidden = !state.running;
+  $('start').hidden = running;
+  $('practice-line').hidden = running;
+  $('pause').hidden = !running;
   $('pause').textContent = state.state === 'paused' ? 'Resume' : 'Pause';
-  $('stop').hidden = !state.running;
+  $('stop').hidden = !running;
 
-  $('bot-settings').disabled = state.running;
-  $('settings-locked').hidden = !state.running;
-  $('check').disabled = state.running;
+  const problem = $('start-problem');
+  problem.textContent = running ? '' : startProblems.join(' ');
+  problem.hidden = problem.textContent === '';
+
+  // Settings apply when a session starts, so they are locked while one runs.
+  $('setup').disabled = running;
+  $('setup-locked').hidden = !running;
+  $('more-settings').disabled = running;
+  $('more-locked').hidden = !running;
+  $('check').disabled = running;
+  if (running) $('check-message').hidden = true; // what Take a look said is about an older picture
 
   const stats = state.stats;
-  $('stat-casts').textContent = stats.casts;
-  $('stat-looted').textContent = practice ? stats.practice_clicks : stats.looted;
+  $('stat-looted-label').textContent = state.practice ? 'Would have clicked' : 'Caught';
+  $('stat-looted').textContent = state.practice ? stats.practice_clicks : stats.looted;
   $('stat-missed').textContent = stats.missed;
   $('stat-time').textContent = clock(stats.elapsed_seconds);
-  $('stat-speed').textContent = stats.inference_ms ? `${stats.inference_ms} ms` : '–';
-  if (stats.best_score !== null) setScore(stats.best_score);
 }
 
-function setScore(score) {
-  $('score-meter').value = score;
-  const needed = Math.round(state.settings.confidence * 100);
-  $('score-text').textContent = `${Math.round(score * 100)}% · needs ${needed}%`;
-}
-
-function appendLog(entries) {
-  if (!entries.length) return;
+function addToLog(entries) {
   const list = $('log');
   const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 30;
 
@@ -187,7 +189,7 @@ function appendLog(entries) {
     const item = document.createElement('li');
     item.className = entry.level;
     const time = document.createElement('time');
-    time.textContent = new Date(entry.time * 1000).toLocaleTimeString([], { hour12: false });
+    time.textContent = timeOfDay(entry.time);
     const text = document.createElement('span');
     text.textContent = entry.message;
     item.append(time, text);
@@ -197,18 +199,18 @@ function appendLog(entries) {
   if (atBottom) list.scrollTop = list.scrollHeight;
 }
 
-async function loadPreview() {
-  previewAt = Date.now();
+async function loadPicture() {
+  pictureAt = Date.now();
   try {
     const response = await fetch('/api/preview.jpg', { headers: { 'X-Fishbot-Token': token } });
     if (!response.ok) return;
     const url = URL.createObjectURL(await response.blob());
-    const image = $('preview');
-    image.src = url;
-    image.hidden = false;
+    $('preview').src = url;
+    $('preview-frame').hidden = false;
     $('preview-empty').hidden = true;
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    previewUrl = url;
+    $('preview-key').hidden = false;
+    if (pictureUrl) URL.revokeObjectURL(pictureUrl);
+    pictureUrl = url;
   } catch (error) {
     // the next refresh tries again
   }
@@ -224,30 +226,30 @@ async function clickPicture(id) {
 }
 
 function clickCaption(click) {
-  const time = new Date(click.time * 1000).toLocaleTimeString([], { hour12: false });
-  const what = click.practice ? 'Would have clicked' : 'Clicked';
-  return `${what} at ${time} · x ${click.x}, y ${click.y} · ${Math.round(click.score * 100)}% sure`;
+  const what = click.practice ? 'Would have clicked here' : 'Clicked here';
+  return `${what} at ${timeOfDay(click.time)}. It was ${Math.round(click.score * 100)}% sure this was a bite.`;
 }
 
-async function renderClicks(clicks) {
+async function showClicks(clicks) {
   const shown = clicks.map((click) => click.id).join(',');
   if (shown === clicksShown) return;
   clicksShown = shown;
 
   $('clicks-block').hidden = clicks.length === 0;
+  $('clicks-count').textContent = clicks.length ? `(${clicks.length})` : '';
+
   const items = [];
   for (const click of clicks) {
     const item = document.createElement('li');
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'click';
-    button.title = clickCaption(click);
     const image = document.createElement('img');
     image.alt = clickCaption(click);
     const url = await clickPicture(click.id);
     if (url) image.src = url;
     const label = document.createElement('span');
-    label.textContent = `${new Date(click.time * 1000).toLocaleTimeString([], { hour12: false })}${click.practice ? ' · practice' : ''}`;
+    label.textContent = `${timeOfDay(click.time)}${click.practice ? ' · practice' : ''}`;
     button.append(image, label);
     button.addEventListener('click', () => {
       $('click-picture').src = image.src;
@@ -270,22 +272,22 @@ async function renderClicks(clicks) {
   }
 }
 
-function render(next) {
+function show(next) {
   const first = state === null;
   state = next;
   if (first) setUp(next);
 
-  syncSettings(next.settings);
-  renderStatus();
-  appendLog(next.log);
+  showSettings(next.settings);
+  showStatus();
+  addToLog(next.log);
   cursor = Math.max(cursor, next.log_cursor);
-  renderClicks(next.clicks);
+  showClicks(next.clicks);
 
-  if (next.preview && next.preview !== previewTag) {
+  if (next.preview && next.preview !== pictureTag) {
     const live = next.preview.startsWith('live-');
-    if (!live || Date.now() - previewAt >= LIVE_PREVIEW_MS) {
-      previewTag = next.preview;
-      loadPreview();
+    if (!live || Date.now() - pictureAt >= LIVE_PICTURE_MS) {
+      pictureTag = next.preview;
+      loadPicture();
     }
   }
 }
@@ -293,24 +295,18 @@ function render(next) {
 async function refresh() {
   if (closed) return;
   try {
-    render(await api(`/api/state?since=${cursor}`));
+    show(await api(`/api/state?since=${cursor}`));
     $('offline').hidden = true;
   } catch (error) {
     $('offline').hidden = false;
   }
 }
 
-// ----- settings -----
+// ----- changing settings -----
 
 function setError(name, message) {
   const target = document.querySelector(`[data-error-for="${name}"]`);
   if (target) target.textContent = message ? `${message.charAt(0).toUpperCase()}${message.slice(1)}.` : '';
-}
-
-function flashSaved() {
-  $('saved').textContent = 'Saved';
-  clearTimeout(savedTimer);
-  savedTimer = setTimeout(() => { $('saved').textContent = ''; }, 1500);
 }
 
 async function save(changes) {
@@ -318,7 +314,6 @@ async function save(changes) {
   try {
     const result = await api('/api/settings', changes);
     for (const name of Object.keys(changes)) setError(name, result.errors[name] || '');
-    if (Object.keys(result.errors).length === 0) flashSaved();
     await refresh();
     return result;
   } catch (error) {
@@ -343,11 +338,7 @@ document.addEventListener('change', (event) => {
   save({ [element.dataset.setting]: valueOf(element) });
 });
 
-$('checks_per_second').addEventListener('input', (event) => {
-  $('checks-value').textContent = event.target.value;
-});
-
-// ----- press-to-set keys -----
+// ----- choosing a key by pressing it -----
 
 const US_POSITIONS = {
   Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Backslash: '\\', Semicolon: ';',
@@ -376,7 +367,7 @@ function stopListening() {
   if (!listening) return;
   listening.button.classList.remove('listening');
   listening = null;
-  if (state) syncSettings(state.settings);
+  if (state) showSettings(state.settings);
 }
 
 function startListening(button) {
@@ -385,7 +376,7 @@ function startListening(button) {
   setError(listening.name, '');
   button.classList.remove('unset');
   button.classList.add('listening');
-  button.textContent = 'Press a key…';
+  button.textContent = 'Press the key now…';
 }
 
 document.addEventListener('keydown', (event) => {
@@ -400,7 +391,7 @@ document.addEventListener('keydown', (event) => {
   listening.button.blur(); // otherwise the key's release can click the button again
   stopListening();
   if (!name || !state.keys.includes(name)) {
-    return setError(field, 'that key cannot be used here. Try a letter or a number');
+    return setError(field, 'that key cannot be used. Try a letter or a number');
   }
   return save({ [field]: name });
 }, true);
@@ -414,62 +405,66 @@ document.addEventListener('click', (event) => {
   if (keyButton) startListening(keyButton);
 });
 
-// ----- controls -----
+// ----- the main buttons -----
 
-async function act(path, body) {
-  try {
-    return await api(path, body);
-  } catch (error) {
-    startProblems = [error.message];
-    return null;
-  } finally {
-    await refresh();
+async function start(practice) {
+  startProblems = [];
+  const result = await api('/api/start', { practice }).catch((error) => ({ problems: [error.message] }));
+  startProblems = result.problems;
+  await refresh();
+  // Take the person to what is missing, rather than leaving them to look for it.
+  if (!state.settings.fishing_key && startProblems.length) {
+    const key = document.querySelector('[data-key-setting="fishing_key"]');
+    key.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    key.focus();
   }
 }
 
-$('start').addEventListener('click', async () => {
-  startProblems = [];
-  $('start').disabled = true;
-  const result = await api('/api/start', {}).catch((error) => ({ problems: [error.message] }));
-  startProblems = result.problems;
+async function act(path, body) {
+  try {
+    await api(path, body);
+  } catch (error) {
+    startProblems = [error.message];
+  }
   await refresh();
-});
+}
 
+$('start').addEventListener('click', () => start(false));
+$('practice').addEventListener('click', () => start(true));
 $('pause').addEventListener('click', () => act('/api/pause', { paused: state.state !== 'paused' }));
 $('stop').addEventListener('click', () => act('/api/stop', {}));
 
 $('quit').addEventListener('click', async () => {
-  if (!window.confirm('Close the app? Fishing stops.')) return;
+  if (!window.confirm('Quit WoW Fish YOLO? Fishing stops.')) return;
   closed = true;
   await api('/api/quit', {}).catch(() => null);
-  $('offline').textContent = 'The app is closed. You can close this tab.';
+  $('offline').textContent = 'WoW Fish YOLO has quit. You can close this tab.';
   $('offline').hidden = false;
 });
 
 $('check').addEventListener('click', async () => {
   const button = $('check');
   const message = $('check-message');
-  const show = (text, bad) => {
+  const say = (text, bad) => {
     message.textContent = text;
     message.classList.toggle('bad', bad);
     message.hidden = false;
   };
 
   button.disabled = true;
-  button.textContent = 'Checking…';
-  show('The game comes to the front for a moment. Switch back here to see the result.', false);
+  button.textContent = 'Looking…';
+  say('The game is coming to the front for a moment. Come back here to see the picture.', false);
   try {
     const result = await api('/api/check', {});
-    show(result.message, !result.ok);
-    if (result.best_score !== undefined) setScore(result.best_score);
+    say(result.message, !result.ok);
   } catch (error) {
-    show(error.message, true);
+    say(error.message, true);
   }
-  button.textContent = 'Check now';
+  button.textContent = 'Take a look';
   await refresh();
 });
 
-// ----- assistant -----
+// ----- the assistant -----
 
 function chatItem(role, text) {
   const item = document.createElement('li');
@@ -480,11 +475,11 @@ function chatItem(role, text) {
   return item;
 }
 
-function proposalBox(answer) {
+function suggestionBox(answer) {
   const box = document.createElement('div');
   box.className = 'proposal';
   const title = document.createElement('strong');
-  title.textContent = 'Suggested settings';
+  title.textContent = 'It suggests these changes';
   const list = document.createElement('ul');
 
   for (const [name, value] of Object.entries(answer.changes)) {
@@ -496,7 +491,7 @@ function proposalBox(answer) {
   for (const [name, reason] of Object.entries(answer.rejected)) {
     const item = document.createElement('li');
     item.className = 'rejected';
-    item.textContent = `Not applied – ${answer.labels[name] || name}: ${reason}`;
+    item.textContent = `Left out – ${answer.labels[name] || name}: ${reason}`;
     list.append(item);
   }
   box.append(title, list);
@@ -507,11 +502,11 @@ function proposalBox(answer) {
     const apply = document.createElement('button');
     apply.type = 'button';
     apply.className = 'button primary small';
-    apply.textContent = 'Apply';
+    apply.textContent = 'Use these';
     const dismiss = document.createElement('button');
     dismiss.type = 'button';
     dismiss.className = 'button small';
-    dismiss.textContent = 'Dismiss';
+    dismiss.textContent = 'No thanks';
 
     const finish = (text) => {
       const done = document.createElement('span');
@@ -523,9 +518,9 @@ function proposalBox(answer) {
       apply.disabled = true;
       const result = await save(answer.changes);
       const failed = result ? Object.keys(result.errors).length : 1;
-      finish(failed ? 'Some settings could not be applied.' : state.running ? 'Applied. Takes effect the next time you start.' : 'Applied.');
+      finish(failed ? 'Some of them could not be changed.' : state.running ? 'Done. They count from the next start.' : 'Done.');
     });
-    dismiss.addEventListener('click', () => finish('Dismissed.'));
+    dismiss.addEventListener('click', () => finish('Left as it was.'));
     buttons.append(apply, dismiss);
     box.append(buttons);
   }
@@ -541,7 +536,7 @@ async function ask(text) {
   $('chat-input').value = '';
   chat.push({ role: 'user', content: question });
   chatItem('user', question);
-  const waiting = chatItem('thinking', 'Thinking… a local model can take a while.');
+  const waiting = chatItem('thinking', 'Thinking… this can take a little while.');
 
   try {
     const answer = await api('/api/assistant/chat', { messages: chat.slice(-CHAT_MESSAGES_SENT) });
@@ -549,7 +544,7 @@ async function ask(text) {
     chat.push({ role: 'assistant', content: answer.reply.slice(0, CHAT_MESSAGE_CHARS) });
     const item = chatItem('assistant', answer.reply);
     if (Object.keys(answer.changes).length || Object.keys(answer.rejected).length) {
-      item.append(proposalBox(answer));
+      item.append(suggestionBox(answer));
     }
   } catch (error) {
     waiting.remove();
@@ -581,8 +576,8 @@ $('assistant-test').addEventListener('click', async () => {
   const button = $('assistant-test');
   const result = $('assistant-test-result');
   button.disabled = true;
-  result.className = 'muted';
-  result.textContent = 'Connecting…';
+  result.className = 'quiet';
+  result.textContent = 'Checking…';
   try {
     const answer = await api('/api/assistant/test', {});
     result.className = answer.ok ? 'good' : 'bad';

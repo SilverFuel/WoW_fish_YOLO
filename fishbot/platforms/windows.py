@@ -15,7 +15,6 @@ SYSTEM = 'windows'
 LABEL = 'Windows'
 SETUP_NOTES = [
     'Run the game in Windowed or Windowed (Fullscreen) mode.',
-    'If the game runs as administrator, start the bot as administrator too, or Windows will drop its input.',
 ]
 
 WINDOW_TITLE = 'World of Warcraft'
@@ -86,7 +85,7 @@ def find_game_window():
         hint = ''
         if titled:
             hint = f' ({len(titled)} window(s) are titled "{WINDOW_TITLE}" but do not belong to the game client.)'
-        raise GameWindowNotFound(f'No {WINDOW_TITLE} game window was found. Is the game running?' + hint)
+        raise GameWindowNotFound(f'{WINDOW_TITLE} does not seem to be open. Start the game, then try again.' + hint)
 
     return GameWindow(clients[0])
 

@@ -209,7 +209,7 @@ def test_chat_returns_validated_suggestions_without_applying_them(helper, model_
     assert result['reply'] == 'A smaller area and fewer looks will help.'
     assert result['changes'] == {'scan_area': 'center50', 'checks_per_second': 4}
     assert set(result['rejected']) == {'cpu_threads', 'assistant_url'}
-    assert result['labels']['scan_area'] == 'Scan area'
+    assert result['labels']['scan_area'] == 'How much of the game it watches'
     # Nothing changed: applying is the user's decision.
     assert helper._service.store.settings.scan_area == 'full'
     assert helper._service.store.settings.assistant_url == model_server.url
@@ -225,7 +225,7 @@ def test_suggestions_without_a_reply_get_a_default_sentence(helper, model_server
     model_server.answer = json.dumps({'changes': {'cast_seconds': 30}})
 
     assert ask(helper) == {'reply': 'Here is what I suggest.', 'changes': {'cast_seconds': 30},
-                           'rejected': {}, 'labels': {'cast_seconds': 'Cast time'}}
+                           'rejected': {}, 'labels': {'cast_seconds': 'Wait for a bite'}}
 
 
 def test_an_empty_answer_is_an_error(helper, model_server):

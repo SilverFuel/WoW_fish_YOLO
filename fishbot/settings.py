@@ -32,7 +32,6 @@ class Settings:
     cpu_threads: int = 2
     stop_after_minutes: int = 0
     stop_after_misses: int = 5
-    practice_mode: bool = False
     pause_on_mouse_move: bool = True
     assistant_enabled: bool = False
     assistant_url: str = 'http://localhost:11434/v1'
@@ -49,14 +48,14 @@ RANGES = {'lure_minutes': (1, 240), 'cast_seconds': (5, 60), 'confidence': (0.5,
           'checks_per_second': (1, 15), 'cpu_threads': (1, 8),
           'stop_after_minutes': (0, 1440), 'stop_after_misses': (0, 100)}
 
-LABELS = {'fishing_key': 'Fishing key', 'lure_key': 'Lure key', 'lure_minutes': 'Lure duration',
-          'pause_hotkey': 'Pause hotkey', 'stop_hotkey': 'Stop hotkey', 'cast_seconds': 'Cast time',
-          'confidence': 'Confidence', 'scan_area': 'Scan area', 'checks_per_second': 'Checks per second',
-          'cpu_threads': 'CPU threads', 'stop_after_minutes': 'Stop after minutes',
-          'stop_after_misses': 'Stop after misses', 'assistant_url': 'Assistant server',
-          'assistant_model': 'Assistant model', 'lure_enabled': 'Use a lure',
-          'assistant_enabled': 'Assistant', 'practice_mode': 'Practice mode',
-          'pause_on_mouse_move': 'Pause when the mouse is moved'}
+LABELS = {'fishing_key': 'Fishing key', 'lure_key': 'Lure key', 'lure_minutes': 'How long a lure lasts',
+          'pause_hotkey': 'Pause key', 'stop_hotkey': 'Stop key', 'cast_seconds': 'Wait for a bite',
+          'confidence': 'How sure it must be', 'scan_area': 'How much of the game it watches',
+          'checks_per_second': 'Looks per second', 'cpu_threads': 'How much of the processor it uses',
+          'stop_after_minutes': 'Stop after this many minutes', 'stop_after_misses': 'Stop after casts with no fish',
+          'assistant_url': 'Where the assistant runs',
+          'assistant_model': 'Which assistant model', 'lure_enabled': 'Use a lure',
+          'assistant_enabled': 'Assistant', 'pause_on_mouse_move': 'Let go when I move the mouse'}
 
 
 def _coerce(name, value):
@@ -95,7 +94,7 @@ def _check_text(name, value, system):
     if name in ('fishing_key', 'lure_key'):
         value = value.lower()
         if value and value not in keys.pressable_keys(system):
-            raise ValueError(f"'{value}' is not a key the bot can press on this system")
+            raise ValueError(f"'{value}' can't be used here. Try a letter or a number")
     elif name in ('pause_hotkey', 'stop_hotkey'):
         value = value.lower()
         if value not in keys.HOTKEYS:
@@ -177,9 +176,9 @@ def problems_before_start(settings):
     """Reasons the bot cannot start with these settings, in plain words."""
     problems = []
     if not settings.fishing_key:
-        problems.append('Set the key your fishing spell is bound to.')
+        problems.append('Pick your fishing key first.')
     if settings.lure_enabled and not settings.lure_key:
-        problems.append('Set the lure key, or turn the lure off.')
+        problems.append('Pick your lure key, or switch the lure off.')
     return problems
 
 

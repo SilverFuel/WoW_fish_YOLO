@@ -154,7 +154,7 @@ def test_state_reports_what_the_page_needs(app):
 
     assert status == 200
     assert state['state'] == 'idle' and state['running'] is False
-    assert state['problems'] == ['Set the key your fishing spell is bound to.']
+    assert state['problems'] == ['Pick your fishing key first.']
     assert state['platform']['system'] == 'demo'
     assert call_json(app, 'GET', '/api/state?since=abc')[0] == 400
 
@@ -173,7 +173,7 @@ def test_start_reports_problems_instead_of_starting(app):
     status, result = call_json(app, 'POST', '/api/start', {})
 
     assert status == 200
-    assert result == {'problems': ['Set the key your fishing spell is bound to.']}
+    assert result == {'problems': ['Pick your fishing key first.']}
 
 
 def test_full_session_over_http(app):
@@ -194,7 +194,7 @@ def test_full_session_over_http(app):
     assert wait_for(lambda: call_json(app, 'GET', '/api/state')[1]['running'] is False)
     final = call_json(app, 'GET', '/api/state')[1]
     assert final['message'] == 'Stopped.'
-    assert any('looted' in entry['message'] for entry in final['log'])
+    assert any(entry['message'].startswith('Got a bite and clicked the bobber') for entry in final['log'])
 
 
 def test_preview_is_404_before_any_picture_and_check_provides_one(app):
@@ -235,3 +235,62 @@ def test_quit_stops_the_server(app):
 
     app.thread.join(5)
     assert not app.thread.is_alive()
+
+
+def test_hello_needs_no_token_and_says_only_what_a_second_launch_needs(app):
+    status, hello = call_json(app, 'GET', '/api/hello', token=False)
+
+    assert status == 200
+    assert hello == {'app': 'wow-fish-yolo', 'demo': True}
+    assert call_json(app, 'GET', '/api/hello', token=False, host='evil.example:80')[0] == 403
+
+
+def test_the_get_ready_picture_is_served(app):
+    response, picture = call(app, 'GET', '/ready.jpg', token=False)
+
+    assert response.status == 200 and response.getheader('Content-Type') == 'image/jpeg'
+    assert picture[:2] == b'\xff\xd8'
+
+
+def test_practice_is_a_way_of_starting(app):
+    call_json(app, 'POST', '/api/settings', {'fishing_key': 'f'})
+
+    assert call_json(app, 'POST', '/api/start', {'practice': True})[1] == {'problems': []}
+    assert wait_for(lambda: call_json(app, 'GET', '/api/state')[1]['state'] == 'practice')
+
+    state = call_json(app, 'GET', '/api/state')[1]
+    assert state['practice'] is True
+    assert 'practice_mode' not in state['settings']
+    assert app.service.platform.game.events == []
+
+
+def test_starting_a_second_time_finds_the_copy_that_is_running(app):
+    import bot
+
+    assert bot.already_running(app.port, demo=True) == f'http://127.0.0.1:{app.port}/'
+    assert bot.already_running(app.port, demo=False) is None  # the real thing must not reuse a demo
+
+
+def test_nothing_running_means_a_normal_start():
+    import socket
+
+    import bot
+
+    probe = socket.socket()
+    probe.bind(('127.0.0.1', 0))
+    free_port = probe.getsockname()[1]
+    probe.close()
+
+    assert bot.already_running(free_port, demo=False) is None
+
+
+def test_a_second_launch_opens_the_page_and_exits(app, monkeypatch, capsys):
+    import bot
+
+    opened = []
+    monkeypatch.setattr(bot.webbrowser, 'open', opened.append)
+
+    assert bot.main(['--demo', '--port', str(app.port)]) == 0
+
+    assert opened == [f'http://127.0.0.1:{app.port}/']
+    assert 'already running' in capsys.readouterr().out

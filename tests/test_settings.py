@@ -12,13 +12,13 @@ def change(changes, current=Settings(), system='windows'):
 
 
 def test_defaults_cannot_start_until_a_fishing_key_is_set():
-    assert problems_before_start(Settings()) == ['Set the key your fishing spell is bound to.']
+    assert problems_before_start(Settings()) == ['Pick your fishing key first.']
     assert problems_before_start(Settings(fishing_key='f')) == []
 
 
 def test_lure_needs_a_key_only_when_it_is_switched_on():
     assert problems_before_start(Settings(fishing_key='f', lure_enabled=True)) == [
-        'Set the lure key, or turn the lure off.']
+        'Pick your lure key, or switch the lure off.']
     assert problems_before_start(Settings(fishing_key='f', lure_enabled=True, lure_key='l')) == []
 
 
@@ -27,9 +27,9 @@ def test_safeguards_are_on_by_default():
 
     assert defaults.pause_on_mouse_move is True
     assert defaults.stop_after_misses == 5
-    assert defaults.practice_mode is False
-    assert change({'practice_mode': True, 'pause_on_mouse_move': False})[1] == {}
-    assert list(change({'practice_mode': 'on'})[1]) == ['practice_mode']
+    assert change({'pause_on_mouse_move': False})[1] == {}
+    assert list(change({'pause_on_mouse_move': 'on'})[1]) == ['pause_on_mouse_move']
+    assert list(change({'practice_mode': True})[1]) == ['practice_mode']  # practice is a button now, not a setting
 
 
 def test_valid_changes_are_applied_and_normalised():

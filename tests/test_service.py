@@ -23,7 +23,7 @@ class DemoPlatform:
 
     def find_game_window(self):
         if self.window_missing:
-            raise GameWindowNotFound('No World of Warcraft game window was found. Is the game running?')
+            raise GameWindowNotFound('World of Warcraft does not seem to be open. Start the game, then try again.')
         return demo.DemoWindow()
 
     def key_is_down(self, name):
@@ -65,14 +65,14 @@ def wait_for(condition, timeout=20.0):
 def test_will_not_start_without_a_fishing_key(platform, tmp_path):
     service = BotService(platform, SettingsStore(tmp_path / 'settings.json', platform.SYSTEM))
 
-    assert service.start() == ['Set the key your fishing spell is bound to.']
+    assert service.start() == ['Pick your fishing key first.']
     assert not service.running
 
 
 def test_will_not_start_when_the_game_is_not_running(service, platform):
     platform.window_missing = True
 
-    assert service.start() == ['No World of Warcraft game window was found. Is the game running?']
+    assert service.start() == ['World of Warcraft does not seem to be open. Start the game, then try again.']
     assert service.snapshot()['state'] == 'idle'
 
 
@@ -108,7 +108,7 @@ def test_status_is_still_answered_while_the_model_and_controls_load(service, pla
 
 def test_fishes_end_to_end_with_the_real_detector(service, platform):
     assert service.start() == []
-    assert service.start() == ['The bot is already running.']
+    assert service.start() == ['It is already running.']
 
     assert wait_for(lambda: service.snapshot()['stats']['looted'] >= 1)
     running = service.snapshot()
@@ -145,9 +145,8 @@ def test_every_click_is_kept_with_the_picture_it_was_based_on(service, platform)
     assert service.click_jpeg(999) is None
 
 
-def test_practice_mode_sends_nothing_and_still_records_what_it_would_click(service, platform):
-    service.store.update({'practice_mode': True})
-    assert service.start() == []
+def test_practice_sends_nothing_and_still_records_what_it_would_click(service, platform):
+    assert service.start(practice=True) == []
     assert wait_for(lambda: service.snapshot()['state'] == 'practice')
 
     platform.game.cast()  # the user casts in the game themselves
@@ -160,6 +159,11 @@ def test_practice_mode_sends_nothing_and_still_records_what_it_would_click(servi
     assert snapshot['clicks'][0]['practice'] is True
     assert (snapshot['clicks'][0]['x'], snapshot['clicks'][0]['y']) == pytest.approx(platform.game.landings[0], abs=6)
     assert snapshot['stats']['looted'] == 0 and snapshot['stats']['casts'] == 0
+    assert snapshot['practice'] is True
+
+    service.start()  # a normal start afterwards is a normal session again
+    assert wait_for(lambda: service.snapshot()['state'] == 'fishing')
+    assert service.snapshot()['practice'] is False
 
 
 def test_a_stop_by_a_safeguard_is_marked_as_one(service, platform):
@@ -172,7 +176,7 @@ def test_a_stop_by_a_safeguard_is_marked_as_one(service, platform):
 
     snapshot = service.snapshot()
     assert snapshot['stopped_by_safeguard'] is True
-    assert snapshot['message'].startswith('Stopped: 1 cast in a row caught nothing.')
+    assert snapshot['message'].startswith('Stopped: no fish in 1 cast.')
 
     service.store.update({'stop_after_misses': 0})
     service.start()
@@ -232,7 +236,7 @@ def test_an_error_in_the_loop_is_reported_and_the_service_survives(service, plat
     assert wait_for(lambda: not service.running)
 
     snapshot = service.snapshot()
-    assert snapshot['message'] == 'Stopped by an error: keyboard unplugged'
+    assert snapshot['message'] == 'Stopped because something went wrong: keyboard unplugged'
     assert snapshot['log'][-1]['level'] == 'error'
     assert snapshot['state'] == 'idle'
 
@@ -317,7 +321,7 @@ def test_check_setup_explains_a_missing_game(service, platform):
 
     result = service.check_setup()
 
-    assert result == {'ok': False, 'message': 'No World of Warcraft game window was found. Is the game running?'}
+    assert result == {'ok': False, 'message': 'World of Warcraft does not seem to be open. Start the game, then try again.'}
 
 
 def test_preview_is_live_while_fishing_and_kept_afterwards(service):

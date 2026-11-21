@@ -21,9 +21,11 @@ from urllib.parse import parse_qs, urlparse
 from fishbot.assistant import Assistant, AssistantError
 
 WEB =Path(__file__).resolve().parent / 'web'
+ASSETS = Path(__file__).resolve().parent / 'assets'
 STATIC = {'/app.js': ('app.js', 'text/javascript; charset=utf-8'),
           '/styles.css': ('styles.css', 'text/css; charset=utf-8'),
           '/favicon.svg': ('favicon.svg', 'image/svg+xml')}
+APP_NAME = 'wow-fish-yolo'
 MAX_BODY_BYTES = 64 * 1024
 MAX_JSON_DEPTH = 32
 DEFAULT_PORT = 8765
@@ -122,7 +124,7 @@ class AppServer:
                 errors = {name: f'is in use now, but the settings file could not be saved ({reason})' for name in body}
             return {'settings': settings.to_dict(), 'errors': errors}
         if path == '/api/start':
-            return {'problems': service.start()}
+            return {'problems': service.start(practice=body.get('practice') is True)}
         if path == '/api/stop':
             service.stop('Stopped.')
             return {}
@@ -227,6 +229,11 @@ class Handler(BaseHTTPRequestHandler):
             self._check_host()
             url = urlparse(self.path)
 
+            if url.path == '/api/hello':
+                # No token needed: lets a second launch see that the app is already running. It says nothing else.
+                return self._send_json({'app': APP_NAME, 'demo': self.app.service.platform.SYSTEM == 'demo'})
+            if url.path == '/ready.jpg':
+                return self._send(200, (ASSETS / 'demo_calm.jpg').read_bytes(), 'image/jpeg')
             if url.path == '/':
                 page = (WEB / 'index.html').read_text(encoding='utf-8').replace('__TOKEN__', self.app.token)
                 return self._send(200, page.encode('utf-8'), 'text/html; charset=utf-8')

@@ -209,7 +209,7 @@ def test_a_confident_sighting_at_the_edge_of_the_window_is_not_accepted(splash_d
     assert watcher.find_splash(window) is None
     assert watcher.last.detection.score > 0.8  # the model was sure
     assert watcher.last.confident is False
-    assert watcher.last.note == 'at the edge of the window, where the bobber does not land'
+    assert watcher.last.note == 'too close to the edge of the game window'
 
 
 @pytest.mark.parametrize('position, box, expected', [

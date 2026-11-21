@@ -49,6 +49,7 @@ class BotService:
         self._last_stats = Stats()
         self._last_elapsed = 0.0
         self._message = ''
+        self._practice = False
         self._stopped_by_safeguard = False
         self._clicks = collections.deque(maxlen=CLICKS_KEPT)  # what was clicked, newest last
         self._click_id = 0
@@ -68,11 +69,11 @@ class BotService:
         thread = self._thread
         return self._starting or (thread is not None and thread.is_alive())
 
-    def start(self):
+    def start(self, practice=False):
         """Start fishing. Returns a list of problems; empty means it started."""
         with self._lock:
             if self.running:
-                return ['The bot is already running.']
+                return ['It is already running.']
 
             settings = self.store.settings
             problems = problems_before_start(settings)
@@ -93,7 +94,8 @@ class BotService:
             self._pause_while_starting = False
             self._message = ''
             self._stopped_by_safeguard = False
-            self._thread = threading.Thread(target=self._run, args=(settings, window), name='fishing', daemon=True)
+            self._practice = practice
+            self._thread = threading.Thread(target=self._run, args=(settings, window, practice), name='fishing', daemon=True)
             self._thread.start()
             return []
 
@@ -137,14 +139,15 @@ class BotService:
                 self._controls = self.platform.create_controls()
             return self._controls
 
-    def _run(self, settings, window):
+    def _run(self, settings, window, practice):
         bot = None
         finished = threading.Event()
         try:
             vision = Vision(self._detector_for(settings.cpu_threads), self._grabber,
                             settings.confidence, settings.scan_area)
             bot = FishingBot(settings, window, vision, self._controls_once(), log=self.log,
-                             on_click=lambda x, y, practice: self._remember_click(vision, x, y, practice))
+                             on_click=lambda x, y, practised: self._remember_click(vision, x, y, practised),
+                             practice=practice)
             with self._lock:
                 self._bot, self._vision = bot, vision
                 self._starting = False
@@ -153,18 +156,18 @@ class BotService:
                 if self._pause_while_starting:
                     bot.set_paused(True)
 
-            if not settings.practice_mode:
-                self.log(f'Started. {settings.pause_hotkey.upper()} pauses, {settings.stop_hotkey.upper()} stops.')
+            if not practice:
+                self.log(f'Started. In the game, {settings.pause_hotkey.upper()} pauses and {settings.stop_hotkey.upper()} stops.')
             threading.Thread(target=self._watch_hotkeys, args=(bot, settings, finished),
                              name='hotkeys', daemon=True).start()
             bot.run()
             message, level = bot.stop_reason or 'Stopped.', 'info'
         except Exception as error:  # the loop must never take the app down with it
             if type(error).__name__ == 'FailSafeException':
-                message, level = 'Stopped: the mouse was moved into a screen corner (fail-safe).', 'info'
+                message, level = 'Stopped because the mouse went into a corner of the screen.', 'info'
             else:
                 traceback.print_exc()
-                message, level = f'Stopped by an error: {error}', 'error'
+                message, level = f'Stopped because something went wrong: {error}', 'error'
         finally:
             finished.set()
 
@@ -210,7 +213,7 @@ class BotService:
                 try:
                     down = self.platform.key_is_down(name)
                 except Exception as error:
-                    self.log(f'Hotkeys are unavailable ({error}). Use the buttons instead.', 'warning')
+                    self.log(f'The pause and stop keys are not working here ({error}). Use the buttons on the page.', 'warning')
                     return
                 if down and not was_down[name]:
                     action()
@@ -222,7 +225,7 @@ class BotService:
         """Bring the game to the front, take one look and describe what was found."""
         with self._lock:
             if self.running:
-                return {'ok': False, 'message': 'Stop the bot first. While it runs, the preview is live.'}
+                return {'ok': False, 'message': 'It is running, so the picture updates by itself.'}
 
         try:
             window = self.platform.find_game_window()
@@ -243,7 +246,7 @@ class BotService:
 
         region = window.capture_region()
         if region is None:
-            return {'ok': False, 'message': 'The game window is minimised or on another desktop. Bring it up and try again.'}
+            return {'ok': False, 'message': 'The game is minimised or on another desktop. Bring it back and try again.'}
 
         settings = self.store.settings
         try:
@@ -252,7 +255,7 @@ class BotService:
             sighting = vision.survey(region)
         except Exception as error:
             traceback.print_exc()
-            return {'ok': False, 'message': f'The screen could not be captured: {error}'}
+            return {'ok': False, 'message': f'It could not take a picture of the screen: {error}'}
 
         with self._lock:
             self._sighting = sighting
@@ -260,11 +263,12 @@ class BotService:
 
         blank = looks_blank(sighting.frame)
         if blank:
-            message = 'The capture is black, so the bot cannot see the game. Is the game window covered or on a screen that is off?'
+            message = 'The picture is black, so it cannot see the game. Is the game covered up, or on a screen that is off?'
         elif not in_front:
-            message = 'The game could not be brought to the front, so the picture may show another window.'
+            message = 'The game did not come to the front, so this may show another window. Click on the game and try again.'
         else:
-            message = 'This is what the bot sees. The bobber should be inside the outlined area.'
+            message = ('This is what it sees. If that is your game, you are good to go.' if settings.scan_area == 'full'
+                       else 'This is what it sees. The bobber has to land inside the blue box.')
 
         return {'ok': not blank, 'message': message, 'in_front': in_front, 'blank': blank,
                 'width': region['width'], 'height': region['height'],
@@ -301,6 +305,7 @@ class BotService:
                 'state': state,
                 'running': self.running,
                 'message': self._message,
+                'practice': self._practice,  # the current or last session only watched
                 # The last session ended because a safeguard stopped it, not because the user did.
                 'stopped_by_safeguard': self._stopped_by_safeguard and bot is None,
                 'clicks': [{name: value for name, value in click.items() if name != 'picture'}

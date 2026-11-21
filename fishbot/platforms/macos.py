@@ -11,13 +11,9 @@ from fishbot.platforms import GameWindowNotFound
 SYSTEM = 'macos'
 LABEL = 'macOS'
 SETUP_NOTES = [
-    'Allow the app you start the bot from (Terminal, for example) under System Settings > Privacy & Security > '
-    'Screen Recording, so the bot can see the game. Without it the bot sees your desktop picture instead.',
-    'Allow it under Privacy & Security > Accessibility as well, so it can press keys and click.',
-    'If F8/F9 do nothing, allow it under Input Monitoring, or use the buttons on this page. '
-    'On a Mac keyboard the function keys may need the fn key.',
-    'Keys are named by their position on a US keyboard, which is how the bot presses them. '
-    'Function keys cannot be used for fishing or the lure on macOS.',
+    'The first time, your Mac asks to let Terminal record the screen and control the computer. Say yes to both '
+    '(System Settings > Privacy & Security), then start again.',
+    'On a Mac, pick a letter or a number for fishing, not an F-key.',
 ]
 
 # The app is "World of Warcraft" or "World of Warcraft Classic".
@@ -115,7 +111,7 @@ def find_game_window():
     # Search every Space, not just the visible one: a full-screen game sits on its own Space.
     window = pick_game_window(_window_list(onscreen_only=False))
     if window is None:
-        raise GameWindowNotFound(f'No {OWNER_NAME_PREFIX} game window was found. Is the game running?')
+        raise GameWindowNotFound(f'{OWNER_NAME_PREFIX} does not seem to be open. Start the game, then try again.')
     return GameWindow(window['kCGWindowOwnerPID'], window['kCGWindowNumber'])
 
 
@@ -193,12 +189,12 @@ def permission_problems():
             request = getattr(Quartz, 'CGRequestScreenCaptureAccess', None)
             if request is not None:
                 request()
-            problems.append(f'macOS is not letting the bot see the screen. Allow the app you started it from '
-                            f'(Terminal, for example) under {where} > Screen Recording, then start the bot again.')
+            problems.append(f'Your Mac is not letting it see the screen yet. Open {where} > Screen Recording, '
+                            f'switch on Terminal (or the app you started this from), then start it again.')
         if not accessibility_allowed():
             AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: True})
-            problems.append(f'macOS is not letting the bot press keys or click. Allow the app you started it from '
-                            f'under {where} > Accessibility.')
+            problems.append(f'Your Mac is not letting it press keys or click yet. Open {where} > Accessibility '
+                            f'and switch on Terminal (or the app you started this from).')
     return problems
 
 

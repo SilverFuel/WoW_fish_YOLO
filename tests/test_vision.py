@@ -212,6 +212,22 @@ def test_a_confident_sighting_at_the_edge_of_the_window_is_not_accepted(splash_d
     assert watcher.last.note == 'too close to the edge of the game window'
 
 
+def test_take_a_look_judges_a_candidate_the_same_way_a_real_look_does(splash_detector, splash):
+    # Green on the page means "it would click this", so the edge and size rules have to apply here too.
+    canvas = np.zeros((360, 1200, 3), dtype=np.uint8)
+    canvas[:, :640] = splash
+    at_the_edge = {'left': SPLASH_CENTER[0] - 15, 'top': 0, 'width': 640, 'height': 360}
+    in_the_middle = {'left': 0, 'top': 0, 'width': 640, 'height': 360}
+    watcher = vision.Vision(splash_detector, ArrayGrabber(canvas), confidence=0.8, scan_area='full')
+
+    edge = watcher.survey(at_the_edge)
+    assert edge.detection.score > 0.8 and edge.confident is False
+    assert edge.note == 'too close to the edge of the game window'
+
+    middle = watcher.survey(in_the_middle)
+    assert middle.confident is True and middle.note == ''
+
+
 @pytest.mark.parametrize('position, box, expected', [
     ((960, 540), (80, 60), ''),
     ((100 + 97, 50 + 540), (80, 60), ''),                 # just inside the 5% margin

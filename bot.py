@@ -8,6 +8,7 @@ Starting it a second time just opens the page of the copy that is already runnin
 """
 import argparse
 import json
+import socket
 import sys
 import urllib.request
 import webbrowser
@@ -43,19 +44,29 @@ def changes_from(args):
 
 
 def already_running(port, demo):
-    """The address of a copy that is already running in the same mode, or None."""
-    from fishbot.server import APP_NAME
+    """The address of a copy that is already running in the same mode, or None.
 
-    address = f'http://127.0.0.1:{port}/'
+    A copy that found its usual port taken sits on one of the next few, so those are asked as well,
+    up to the first port that nothing is listening on.
+    """
+    from fishbot.server import APP_NAME, PORT_ATTEMPTS
+
     directly = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # this computer, never a proxy
-    try:
-        with directly.open(address + 'api/hello', timeout=1.5) as response:
-            hello = json.loads(response.read().decode('utf-8'))
-    except (OSError, ValueError):
-        return None
+    for candidate in range(port, port + PORT_ATTEMPTS):
+        try:
+            socket.create_connection(('127.0.0.1', candidate), timeout=1.5).close()
+        except OSError:
+            return None  # nothing listens here, so a running copy would have taken this port
 
-    same = isinstance(hello, dict) and hello.get('app') == APP_NAME and hello.get('demo') == demo
-    return address if same else None
+        address = f'http://127.0.0.1:{candidate}/'
+        try:
+            with directly.open(address + 'api/hello', timeout=1.5) as response:
+                hello = json.loads(response.read().decode('utf-8'))
+        except (OSError, ValueError):
+            continue  # some other program has this port
+        if isinstance(hello, dict) and hello.get('app') == APP_NAME and hello.get('demo') == demo:
+            return address
+    return None
 
 
 def run_console(service, practice):

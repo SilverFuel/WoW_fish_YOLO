@@ -145,6 +145,36 @@ def test_every_click_is_kept_with_the_picture_it_was_based_on(service, platform)
     assert service.click_jpeg(999) is None
 
 
+def test_practice_needs_no_keys_because_it_presses_none(platform, tmp_path):
+    service = BotService(platform, SettingsStore(tmp_path / 'fresh.json', platform.SYSTEM))
+    try:
+        assert service.start() == ['Pick your fishing key first.']
+        assert service.start(practice=True) == []
+        assert wait_for(lambda: service.snapshot()['state'] == 'practice')
+    finally:
+        service.shutdown()
+    assert platform.game.events == []
+
+
+def test_the_pretend_game_does_not_promise_keys_that_do_nothing(service):
+    service.start()
+    assert wait_for(lambda: service.snapshot()['state'] == 'fishing')
+    service.stop()
+    service.wait(10)
+
+    lines = [entry['message'] for entry in service.snapshot()['log']]
+    assert lines[0] == 'Started. This is the pretend game, so use the buttons on this page to pause and stop.'
+    assert not any('F8' in line for line in lines)
+
+
+def test_the_page_is_told_what_it_is_waiting_for(service):
+    assert service.snapshot()['waiting_for'] == ''
+
+    service.start()
+    assert wait_for(lambda: service.snapshot()['state'] == 'fishing')
+    assert service.snapshot()['waiting_for'] in ('game', 'mouse')  # the engine's own value is passed on
+
+
 def test_practice_sends_nothing_and_still_records_what_it_would_click(service, platform):
     assert service.start(practice=True) == []
     assert wait_for(lambda: service.snapshot()['state'] == 'practice')
@@ -176,7 +206,7 @@ def test_a_stop_by_a_safeguard_is_marked_as_one(service, platform):
 
     snapshot = service.snapshot()
     assert snapshot['stopped_by_safeguard'] is True
-    assert snapshot['message'].startswith('Stopped: no fish in 1 cast.')
+    assert snapshot['message'].startswith('Stopped: no bite on the last cast.')
 
     service.store.update({'stop_after_misses': 0})
     service.start()

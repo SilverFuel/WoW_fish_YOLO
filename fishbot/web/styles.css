@@ -219,7 +219,7 @@ input[type="number"], input[type="text"], select, textarea {
 input[type="number"] { width: 84px; text-align: right; font-variant-numeric: tabular-nums; }
 input[type="text"] { width: 100%; }
 select { min-width: 84px; }
-.with-unit { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); white-space: nowrap; }
+.with-unit { display: inline-flex; align-items: center; gap: 8px; min-width: 158px; color: var(--muted); white-space: nowrap; } /* the width lines the boxes up from row to row */
 .with-unit input { color: var(--text); }
 
 .keycap {

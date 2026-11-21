@@ -10,6 +10,7 @@ const STATUS = {
   idle: ['Ready', 'Open the game, then press Start fishing.'],
   starting: ['Getting ready…', ''],
   waiting: ['Waiting for the game', 'Click on the game so it is the window in front. Nothing is pressed until it is.'],
+  waitingForMouse: ['Waiting for the mouse', 'Let go of the mouse for a moment. It carries on once the mouse is still.'],
   fishing: ['Fishing', 'Watching for a bite.'],
   practice: ['Practice', 'Watching only. Cast in the game yourself. Nothing is pressed or clicked.'],
   paused: ['Paused', 'Press Resume when you are ready.'],
@@ -31,6 +32,8 @@ let pictureUrl = null;
 let pictureAt = 0;
 let closed = false;
 let clicksShown = '';
+let hintShown = false;
+let hintMouse = true;
 const clickPictures = new Map(); // click id -> object URL of its picture
 const chat = [];
 
@@ -94,6 +97,9 @@ function listOf(texts) {
 
 function setUp(first) {
   $('demo-banner').hidden = first.platform.system !== 'demo';
+  // The pretend game has no keyboard or mouse of its own to listen to.
+  $('hint').hidden = first.platform.system === 'demo';
+  $('hint-demo').hidden = first.platform.system !== 'demo';
   $('version').textContent = `Version ${first.version}`;
   $('platform-notes').replaceChildren(...listOf(first.platform.notes));
   $('platform-notes').hidden = first.platform.notes.length === 0;
@@ -127,18 +133,26 @@ function showSettings(settings) {
 
   $('lure-options').hidden = !settings.lure_enabled;
   $('assistant-body').hidden = !settings.assistant_enabled;
-  $('hint-pause').textContent = keyLabel(settings.pause_hotkey);
-  $('hint-stop').textContent = keyLabel(settings.stop_hotkey);
-  $('hint-mouse').hidden = !settings.pause_on_mouse_move;
+  // A running session keeps the keys it started with, so the hint does not change under it.
+  if (!state.running || !hintShown) {
+    $('hint-pause').textContent = keyLabel(settings.pause_hotkey);
+    $('hint-stop').textContent = keyLabel(settings.stop_hotkey);
+    hintMouse = settings.pause_on_mouse_move;
+    hintShown = true;
+  }
+  // In practice the mouse is yours throughout, so moving it pauses nothing.
+  $('hint-mouse').hidden = !hintMouse || (state.running && state.practice);
 }
 
 function showStatus() {
   const running = state.running;
-  const [title, hint] = STATUS[state.state] || STATUS.idle;
+  const waitingForMouse = state.state === 'waiting' && state.waiting_for === 'mouse';
+  const [title, hint] = (waitingForMouse ? STATUS.waitingForMouse : STATUS[state.state]) || STATUS.idle;
   const stoppedItself = !running && state.stopped_by_safeguard;
   let detail = hint;
   if (state.state === 'idle') {
-    if (state.message) detail = state.message;
+    // A plain "Stopped." after you pressed Stop says nothing new; what to do next is more useful.
+    if (state.message && state.message !== 'Stopped.') detail = state.message;
     else if (!state.settings.fishing_key) detail = 'Three quick steps below, then press Start fishing.';
   }
 
@@ -175,7 +189,7 @@ function showStatus() {
   const stats = state.stats;
   $('stat-looted-label').textContent = state.practice ? 'Would have clicked' : 'Caught';
   $('stat-looted').textContent = state.practice ? stats.practice_clicks : stats.looted;
-  $('stat-missed').textContent = stats.missed;
+  $('stat-missed').textContent = state.practice ? '–' : stats.missed; // practice cannot tell when you cast
   $('stat-time').textContent = clock(stats.elapsed_seconds);
 }
 
@@ -413,7 +427,7 @@ async function start(practice) {
   startProblems = result.problems;
   await refresh();
   // Take the person to what is missing, rather than leaving them to look for it.
-  if (!state.settings.fishing_key && startProblems.length) {
+  if (!practice && !state.settings.fishing_key && startProblems.length) {
     const key = document.querySelector('[data-key-setting="fishing_key"]');
     key.scrollIntoView({ behavior: 'smooth', block: 'center' });
     key.focus();
@@ -453,7 +467,7 @@ $('check').addEventListener('click', async () => {
 
   button.disabled = true;
   button.textContent = 'Looking…';
-  say('The game is coming to the front for a moment. Come back here to see the picture.', false);
+  say('The game is coming to the front. Switch back here to see the picture.', false);
   try {
     const result = await api('/api/check', {});
     say(result.message, !result.ok);

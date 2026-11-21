@@ -7,7 +7,7 @@ stop() {
     echo
     echo "$1"
     echo
-    read -r -p "Press Return to close this window."
+    read -r -p "Press Return to finish. You can then close this window."
     exit 1
 }
 

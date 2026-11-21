@@ -281,6 +281,37 @@ def test_starting_a_second_time_finds_the_copy_that_is_running(app):
     assert bot.already_running(app.port, demo=False) is None  # the real thing must not reuse a demo
 
 
+def test_a_copy_that_had_to_use_another_port_is_still_found(tmp_path):
+    import http.server
+
+    import bot
+
+    class SomethingElse(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_error(404)
+
+        def log_message(self, *arguments):
+            pass
+
+    other = http.server.ThreadingHTTPServer(('127.0.0.1', 0), SomethingElse)
+    threading.Thread(target=other.serve_forever, daemon=True).start()
+    usual_port = other.server_address[1]
+
+    platform = DemoPlatform()
+    service = BotService(platform, SettingsStore(tmp_path / 'settings.json', platform.SYSTEM))
+    server = AppServer(service, port=usual_port)  # taken, so it moves along
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        assert server.port != usual_port
+        assert bot.already_running(usual_port, demo=True) == f'http://127.0.0.1:{server.port}/'
+    finally:
+        service.shutdown()
+        server.httpd.shutdown()
+        server.httpd.server_close()
+        other.shutdown()
+        other.server_close()
+
+
 def test_nothing_running_means_a_normal_start():
     import socket
 

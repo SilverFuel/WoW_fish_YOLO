@@ -252,3 +252,9 @@ def test_store_does_not_rewrite_the_file_when_nothing_changed(tmp_path):
     store.update({'cast_seconds': 20})
 
     assert not path.exists()
+
+
+def test_a_range_is_explained_in_the_units_the_person_types():
+    # "How sure it must be" is typed as a percentage and stored as a fraction.
+    assert change({'confidence': 0.99})[1] == {'confidence': 'must be between 50% and 95%'}
+    assert change({'cast_seconds': 2})[1] == {'cast_seconds': 'must be between 5 and 60'}

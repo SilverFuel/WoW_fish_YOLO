@@ -76,7 +76,8 @@ class BotService:
                 return ['It is already running.']
 
             settings = self.store.settings
-            problems = problems_before_start(settings)
+            # Practice presses nothing, so it needs no keys.
+            problems = [] if practice else problems_before_start(settings)
             if problems:
                 return problems
 
@@ -156,7 +157,9 @@ class BotService:
                 if self._pause_while_starting:
                     bot.set_paused(True)
 
-            if not practice:
+            if self.platform.SYSTEM == 'demo':
+                self.log('Started. This is the pretend game, so use the buttons on this page to pause and stop.')
+            elif not practice:
                 self.log(f'Started. In the game, {settings.pause_hotkey.upper()} pauses and {settings.stop_hotkey.upper()} stops.')
             threading.Thread(target=self._watch_hotkeys, args=(bot, settings, finished),
                              name='hotkeys', daemon=True).start()
@@ -306,6 +309,7 @@ class BotService:
                 'running': self.running,
                 'message': self._message,
                 'practice': self._practice,  # the current or last session only watched
+                'waiting_for': bot.waiting_for if bot is not None else '',
                 # The last session ended because a safeguard stopped it, not because the user did.
                 'stopped_by_safeguard': self._stopped_by_safeguard and bot is None,
                 'clicks': [{name: value for name, value in click.items() if name != 'picture'}

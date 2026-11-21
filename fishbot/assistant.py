@@ -29,18 +29,18 @@ LOOPBACK_HOSTS = {'localhost', '127.0.0.1', '::1'}
 # The settings the model may suggest, with the values it may use. Its own connection
 # settings are deliberately absent: a model must not be able to redirect itself.
 SUGGESTABLE = {
-    'fishing_key': 'key the Fishing spell is bound to, e.g. "f", "1", "f5", "space"',
+    'fishing_key': 'key the Fishing spell is bound to, e.g. "f", "1", "space"',
     'lure_enabled': 'true or false',
     'lure_key': 'key the lure is bound to',
     'lure_minutes': 'how long one lure lasts',
     'cast_seconds': 'how long to wait for a bite before casting again (default 20)',
     'confidence': 'how sure the detector must be, as a fraction (default 0.8)',
-    'scan_area': '"full" (whole window, most reliable), "center75" (about half the CPU) or "center50" (about a quarter)',
+    'scan_area': '"full" (whole window, most reliable), "center75" (about a third less CPU) or "center50" (about 60% less)',
     'checks_per_second': 'how often it looks for the splash (default 5)',
     'cpu_threads': 'CPU threads for the detector (default 2)',
     'stop_after_minutes': 'stop after this many minutes, 0 = no limit',
     'stop_after_catches': 'stop after this many catches, 0 = no limit; a simple way to stop before the bags fill up',
-    'stop_after_misses': 'stop after this many casts in a row with no catch, 0 = off (default 5)',
+    'stop_after_misses': 'stop after this many casts in a row with no bite seen, 0 = off (default 5)',
     'pause_on_mouse_move': 'true (default) = pause as soon as the user moves the mouse',
     'pause_hotkey': '"f1" to "f12"',
     'stop_hotkey': '"f1" to "f12"',

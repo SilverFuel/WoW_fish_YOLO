@@ -91,8 +91,17 @@ class Vision:
         left, top = (width - scan_width) // 2, (height - scan_height) // 2
 
         detection = self._detector.detect(frame[top:top + scan_height, left:left + scan_width], self._size)
-        self.last = Sighting(frame, detection, detection.score >= self._confidence,
-                             offset=(left, top), scan_size=(scan_width, scan_height))
+
+        # The same position and size rules as a real look, so a green box means "it would click this".
+        note = ''
+        if detection.score >= self._confidence:
+            to_screen_x, to_screen_y = region['width'] / width, region['height'] / height
+            center_x, center_y = detection.center
+            position = (region['left'] + int((left + center_x) * to_screen_x), region['top'] + int((top + center_y) * to_screen_y))
+            box = ((detection.x2 - detection.x1) * to_screen_x, (detection.y2 - detection.y1) * to_screen_y)
+            note = implausible(position, box, region)
+        self.last = Sighting(frame, detection, detection.score >= self._confidence and not note,
+                             offset=(left, top), scan_size=(scan_width, scan_height), note=note)
         self.looks += 1
         return self.last
 

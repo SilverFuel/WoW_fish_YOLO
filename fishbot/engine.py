@@ -110,6 +110,7 @@ class FishingBot:
         self._spots = collections.deque(maxlen=CATCHES_REMEMBERED)
         self.stats = Stats()
         self.state = WAITING
+        self.waiting_for = 'game'  # while WAITING: 'game' (not the window in front) or 'mouse' (not still yet)
         self.stop_reason = ''
         self.stopped_by_safeguard = False
 
@@ -232,7 +233,8 @@ class FishingBot:
 
         misses = self._settings.stop_after_misses
         if misses and self.stats.misses_in_a_row >= misses:
-            self._trip(f'Stopped: no fish in {misses} cast{"" if misses == 1 else "s"}. Check that the fishing key is right, '
+            what = 'no bite on the last cast' if misses == 1 else f'no bite in {misses} casts in a row'
+            self._trip(f'Stopped: {what}. Check that the fishing key is right, '
                        'and that the game is zoomed all the way in with the buttons and bars hidden.')
             return True
 
@@ -355,14 +357,14 @@ class FishingBot:
                 if practice or self._mouse_has_settled():
                     self.state = PRACTICE if practice else FISHING
                     return True
-                self.state = WAITING
+                self.state, self.waiting_for = WAITING, 'mouse'
                 if waiting_for_mouse_since is None:
                     waiting_for_mouse_since = self._clock()
                 elif waiting_for_mouse_since is not False and self._clock() - waiting_for_mouse_since >= MENTION_MOUSE_AFTER_SEC:
                     self._log('Waiting for you to let go of the mouse.')
                     waiting_for_mouse_since = False  # said once
             else:
-                self.state = WAITING
+                self.state, self.waiting_for = WAITING, 'game'
                 self._require_still_mouse()
                 waiting_for_mouse_since = None
                 if not announced:

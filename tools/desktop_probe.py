@@ -4,11 +4,15 @@
 
 It opens a small test window showing the demo picture and checks, with the same code the bot
 uses, that it can find the window, bring it to the front, capture it, detect the (synthetic)
-splash in it, press a key and right-click on the splash. Run it when the bot does not react on
-your system: the first check that fails says which part is the problem. It briefly takes over
-the keyboard and mouse.
+splash in it, press a key and right-click on the splash. The first check that fails says which
+part is the problem.
 
-The GitHub workflow runs this on Windows and macOS as a report; it never fails the build.
+Before you run it on your own computer, save your work and leave the keyboard and mouse alone:
+for about half a minute it presses keys (f, F5, F8), right-clicks, and opens and then closes
+Notepad (Windows) or TextEdit (Mac). If TextEdit is already open it leaves it alone and skips
+that check. On a Mac the test window may switch to full screen for a moment.
+
+The GitHub workflow runs this on Windows and macOS; a failed check fails the build.
 """
 import os
 import sys
@@ -298,6 +302,9 @@ def main():
             other = subprocess.Popen(['notepad.exe'])
             close = other.kill
         else:
+            if subprocess.run(['pgrep', '-x', 'TextEdit'], capture_output=True).returncode == 0:
+                # Closing it afterwards would take the person's own documents with it.
+                return True, 'skipped: TextEdit is already open, and this check would close it'
             subprocess.run(['open', '-a', 'TextEdit'], check=False)
             close = lambda: subprocess.run(['pkill', '-x', 'TextEdit'], check=False)
         try:
@@ -480,7 +487,7 @@ def finish(root):
         for name, ok, detail in results:
             if not ok:
                 annotation('warning', title, f'FAIL {name}: {detail}')
-    return 0 if ON_GITHUB or passed == total else 1
+    return 0 if passed == total else 1
 
 
 if __name__ == '__main__':

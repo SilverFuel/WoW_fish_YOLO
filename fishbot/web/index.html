@@ -61,9 +61,10 @@
       <div><dt>No bite</dt><dd id="stat-missed">0</dd></div>
       <div><dt>Time</dt><dd id="stat-time">0:00</dd></div>
     </dl>
-    <p class="quiet">
+    <p id="hint" class="quiet">
       In the game: <kbd id="hint-pause">F8</kbd> pauses and <kbd id="hint-stop">F9</kbd> stops<span id="hint-mouse">, or just move the mouse</span>.
     </p>
+    <p id="hint-demo" class="quiet" hidden>In this demo, use the buttons above to pause and stop.</p>
   </section>
 
   <!-- Three steps, once. -->
@@ -97,7 +98,7 @@
         <li>
           <h3>Using a lure? <span class="optional">optional</span></h3>
           <div class="row">
-            <label for="lure_enabled">Put a new lure on when the old one runs out.</label>
+            <label for="lure_enabled">Put a lure on when it starts, and a new one each time it runs out.</label>
             <input class="switch" type="checkbox" id="lure_enabled" data-setting="lure_enabled">
           </div>
           <div id="lure-options" hidden>
@@ -122,12 +123,12 @@
       <h2 id="preview-title">What it sees</h2>
       <button id="check" class="button small" type="button">Take a look</button>
     </div>
-    <p id="preview-empty" class="quiet">Not sure it is looking at the right thing? Press <b>Take a look</b> with the game open. The game jumps to the front for a moment; then come back here.</p>
+    <p id="preview-empty" class="quiet">Not sure it is looking at the right thing? Open the game, then press <b>Take a look</b>. The game comes to the front; switch back here to see the picture.</p>
     <div id="preview-frame" class="preview-frame" hidden>
       <img id="preview" alt="The latest picture it took of the game">
     </div>
     <p id="check-message" class="note" hidden></p>
-    <p id="preview-key" class="quiet" hidden>A green box is a bite it would click. An orange box is something it is not sure about.</p>
+    <p id="preview-key" class="quiet" hidden>A green box is a bite it would click. An orange box is something it noticed but would not click.</p>
   </section>
 
   <details class="card" id="clicks-block" hidden>
@@ -164,7 +165,7 @@
       </div>
       <p class="field-error" data-error-for="stop_after_catches"></p>
       <div class="row">
-        <label for="stop_after_misses">After this many casts with no fish <small>Usually the wrong key, or the game is not set up as in step 1. 0 means never.</small></label>
+        <label for="stop_after_misses">After this many casts in a row with no bite <small>Usually the wrong key, or the game is not zoomed in with the buttons and bars hidden. 0 means never.</small></label>
         <span class="with-unit"><input type="number" id="stop_after_misses" data-setting="stop_after_misses" min="0" max="100" inputmode="numeric"> casts</span>
       </div>
       <p class="field-error" data-error-for="stop_after_misses"></p>

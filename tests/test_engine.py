@@ -473,7 +473,7 @@ def test_stops_after_the_configured_number_of_misses_in_a_row():
 
     assert len(game.controls.presses('f')) == 3
     assert game.bot.stats.missed == 3
-    assert game.bot.stop_reason.startswith('Stopped: no fish in 3 casts.')
+    assert game.bot.stop_reason.startswith('Stopped: no bite in 3 casts in a row.')
 
 
 def test_a_catch_resets_the_run_of_misses():
@@ -702,6 +702,27 @@ def test_waits_for_the_mouse_to_be_left_alone_before_the_first_cast():
     game.bot.run()
 
     assert game.controls.presses('f')[0] >= 0.5 + engine.STILL_BEFORE_START_SEC
+
+
+def test_says_whether_it_is_waiting_for_the_game_or_for_the_mouse():
+    # The page tells the person what to do, so it has to know which of the two it is.
+    game = Game(settings=HANDS_OFF)
+    game.window.foreground = False
+    waited_for = []
+
+    def watch(count):
+        if game.bot.state == engine.WAITING:
+            waited_for.append(game.bot.waiting_for)
+        if count == 10:
+            game.window.foreground = True
+
+    game.clock.on_sleep = watch
+    game.stop_after('press', 1)
+
+    game.bot.run()
+
+    assert waited_for[0] == 'game' and waited_for[-1] == 'mouse'
+    assert waited_for == sorted(waited_for)  # first the game, then the mouse, never back
 
 
 def test_moving_the_mouse_during_a_cast_pauses_the_bot_without_a_click():

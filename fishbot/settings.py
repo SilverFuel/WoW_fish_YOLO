@@ -44,6 +44,9 @@ class Settings:
 
 SAVE_ATTEMPTS = 6
 
+# Stored as a fraction, typed and shown as a percentage.
+SHOWN_AS_PERCENT = {'confidence'}
+
 # field -> (lowest, highest) for the numeric settings
 RANGES = {'lure_minutes': (1, 240), 'cast_seconds': (5, 60), 'confidence': (0.5, 0.95),
           'checks_per_second': (1, 15), 'cpu_threads': (1, 8),
@@ -53,7 +56,7 @@ LABELS = {'fishing_key': 'Fishing key', 'lure_key': 'Lure key', 'lure_minutes': 
           'pause_hotkey': 'Pause key', 'stop_hotkey': 'Stop key', 'cast_seconds': 'Wait for a bite',
           'confidence': 'How sure it must be', 'scan_area': 'How much of the game it watches',
           'checks_per_second': 'Looks per second', 'cpu_threads': 'How much of the processor it uses',
-          'stop_after_minutes': 'Stop after this many minutes', 'stop_after_catches': 'Stop after this many catches', 'stop_after_misses': 'Stop after casts with no fish',
+          'stop_after_minutes': 'Stop after this many minutes', 'stop_after_catches': 'Stop after this many catches', 'stop_after_misses': 'Stop after casts in a row with no bite',
           'assistant_url': 'Where the assistant runs',
           'assistant_model': 'Which assistant model', 'lure_enabled': 'Use a lure',
           'assistant_enabled': 'Assistant', 'pause_on_mouse_move': 'Let go when I move the mouse'}
@@ -83,6 +86,8 @@ def _coerce(name, value):
             number = int(number)
         low, high = RANGES[name]
         if not low <= number <= high:
+            if name in SHOWN_AS_PERCENT:
+                raise ValueError(f'must be between {round(low * 100)}% and {round(high * 100)}%')
             raise ValueError(f'must be between {low} and {high}')
         return number
 

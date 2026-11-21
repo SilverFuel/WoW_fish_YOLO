@@ -41,7 +41,7 @@ exit /b 0
 :nopython
 echo.
 echo WoW Fish YOLO needs Python 3.13, which is free.
-echo   1. Get Python 3.13 from https://www.python.org/downloads/
+echo   1. Get Python 3.13 (64-bit) from https://www.python.org/downloads/
 echo   2. In its installer, tick "Add python.exe to PATH".
 echo   3. Double-click this file again.
 echo.

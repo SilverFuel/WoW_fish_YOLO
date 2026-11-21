@@ -18,8 +18,12 @@ versions. On Windows, tick **Add python.exe to PATH** in the installer. Then dou
 Python may be too new, install Python 3.13 as well. You do not have to remove the one you have: the starter
 picks the one that works.
 
-Which Pythons work: 3.11, 3.12 and 3.13 everywhere, and 3.14 on Windows and on Macs with an Apple chip.
-Anything newer has to wait until the parts this needs catch up.
+Which Pythons work: 3.13 is the one this is tested with, along with 3.11. Python 3.12 should work the same, and
+so should 3.14 on Windows and on Macs with an Apple chip: the parts this needs are published for them, but
+those two are not part of the automatic tests. Anything newer has to wait until the parts this needs catch up.
+
+**My Mac asks to install "command line developer tools".** Press Cancel. That is your Mac looking for Python.
+Install Python 3.13 from python.org instead, then double-click the starter again.
 
 **The page did not open.** The text window shows its address, normally `http://127.0.0.1:8765/`. Type that into
 your browser.
@@ -27,7 +31,8 @@ your browser.
 ## On a Mac
 
 The first time you press Start, your Mac has to allow two things. Both are under System Settings > Privacy &
-Security, and you give them to **Terminal**, because that is what runs the starter. Then start again.
+Security, and you give them to **Terminal**, because that is what runs the starter. After Screen Recording,
+your Mac asks to quit Terminal: let it, then double-click the starter again.
 
 - **Screen Recording**, so it can see the game.
 - **Accessibility**, so it can press your fishing key and click.
@@ -38,7 +43,8 @@ A few things are different on a Mac:
 
 - Pick a letter or a number for fishing, not an F-key.
 - On a Mac laptop, hold `fn` when you press `F8` or `F9`. If they still do nothing, allow **Input Monitoring**
-  for Terminal as well. Moving the mouse and the buttons on the page always work.
+  for Terminal as well. The buttons on the page always work, and so does moving the mouse unless you
+  switched that off.
 - Keys are named by where they sit on a US keyboard.
 
 ## On Windows
@@ -51,14 +57,18 @@ A few things are different on a Mac:
 
 **It says it is waiting for the game.** Click on the game so it is the window in front.
 
-**It never clicks.** Press **Take a look** on the page. You should see your game, zoomed all the way in, with no
-buttons or bars. If it still misses bites, open **More options** and lower **How sure it must be** a little.
+**It says it is waiting for the mouse.** Let go of the mouse for a moment. It carries on once the mouse is still.
+
+**It never clicks.** While it runs, **What it sees** shows the picture it is looking at. You should see your
+game, zoomed all the way in, with no buttons or bars. If that looks right and it still misses bites, stop it,
+open **More options** and lower **How sure it must be** a little.
 
 **It paused and I did not touch the mouse.** Open **More options** and switch off **Let go when I move the
 mouse**.
 
-**It stopped with "no fish".** Usually the fishing key is wrong, or the game is not zoomed all the way in with
-the buttons and bars hidden.
+**It stopped with "no bite".** Usually the fishing key is wrong, or the game is not zoomed all the way in with
+the buttons and bars hidden. It can only tell that no bite appeared. It cannot tell whether a fish reached your
+bags, so full bags or Auto Loot being off never cause this stop.
 
 **My bags filled up.** It cannot see your bags, and it does nothing with what is in them. When the bags are
 full it keeps casting and clicking, but nothing more is kept. Make room before you start, set a limit on catches or time under
@@ -67,14 +77,11 @@ full it keeps casting and clicking, but nothing more is kept. Make room before y
 **It makes my computer slow.** Open **More options** and choose **Watch the middle**. The bobber then has to
 land in the middle of the screen; **Take a look** shows the area as a blue box.
 
-**Nothing happens at all when it presses keys.** There is a self-test that names the part that is not working.
-It takes over the keyboard and mouse for a few seconds:
+**It says it is fishing, but nothing happens in the game.** Its key presses are not reaching the game.
 
-```
-python tools/desktop_probe.py
-```
-
-Run it with the Python inside the folder: `.venv\Scripts\python` on Windows, `.venv/bin/python` on a Mac.
+- On Windows, the game is probably running as administrator. See [On Windows](#on-windows) above.
+- On a Mac, check that **Accessibility** is switched on for Terminal.
+- On both, close the chat box in the game. While it is open, key presses are typed into it.
 
 ## Keeping your bags clear (optional)
 
@@ -127,8 +134,8 @@ as `qwen3:4b` answers faster on a modest computer.
 
 What it can and cannot do:
 
-- It sees your settings, the numbers on the page, and the last lines of **What it has been doing**. It cannot see
-  your screen.
+- It sees your settings, the session's counts (casts, caught, no bite), and the last lines of **What it has been
+  doing**. It cannot see your screen.
 - It can only suggest. Nothing changes until you press **Use these**.
 - It has no part in the fishing itself.
 - Nothing is sent anywhere except the address you set.

@@ -27,10 +27,12 @@ If your computer will not open the starter, see [Help](docs/help.md).
 1. **Get the game ready.** Zoom all the way in, face the water, hide the buttons and bars (`Alt`+`Z`),
    switch on Auto Loot in the game's settings, and make room in your bags.
 2. **Pick your fishing key.** That is the key you press in the game to cast.
-3. Press **Start fishing**.
+3. **Using a lure?** Switch it on and pick its key. Skip this if you are not.
+
+Then press **Start fishing**.
 
 First time? Press **Practice first**. It only watches and never presses or clicks, so you can see what it
-would do before you let it.
+takes for a bite before you let it click.
 
 ## The controls
 
@@ -49,7 +51,7 @@ It stops when things no longer look like fishing: nothing bites, the screen goes
 the same spot. The page says why. Then:
 
 1. Look at the game. If a window popped up, close it with `Esc`.
-2. Open **What it clicked** on the page to see what it took for a bite.
+2. If it clicked anything, open **What it clicked** on the page to see what it took for a bite.
 3. Press **Practice first** before you fish again.
 
 ## More

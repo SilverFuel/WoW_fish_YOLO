@@ -190,11 +190,12 @@ def permission_problems():
             if request is not None:
                 request()
             problems.append(f'Your Mac is not letting it see the screen yet. Open {where} > Screen Recording, '
-                            f'switch on Terminal (or the app you started this from), then start it again.')
+                            f'switch on Terminal (or the app you started this from). Your Mac then asks to quit Terminal: '
+                            f'let it, and double-click the starter again.')
         if not accessibility_allowed():
             AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: True})
             problems.append(f'Your Mac is not letting it press keys or click yet. Open {where} > Accessibility '
-                            f'and switch on Terminal (or the app you started this from).')
+                            f'and switch on Terminal (or the app you started this from), then press Start again.')
     return problems
 
 

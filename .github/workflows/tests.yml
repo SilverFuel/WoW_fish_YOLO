@@ -31,7 +31,7 @@ jobs:
       - run: python -m pytest tests -q
 
   # Runs the real window, capture, key and click code against a test window on a real desktop.
-  # It is a report: results appear as annotations on the run, and it does not fail the build.
+  # Results appear as annotations on the run, and a failed check fails the build.
   desktop-probe:
     name: Desktop probe / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -46,7 +46,9 @@ jobs:
           python-version: '3.13'
           cache: pip
       - run: python -m pip install -r requirements.txt
-      - run: python tools/desktop_probe.py
+      # One more try if it fails: a shared build machine's desktop is sometimes slow to answer.
+      - run: python tools/desktop_probe.py || python tools/desktop_probe.py
+        shell: bash
 
   # Starts the app the way a person does, by its starter, including the one-time set-up.
   # The build machines have several Pythons installed, some too new, so this also checks the starter picks one that works.
@@ -63,3 +65,18 @@ jobs:
         with:
           python-version: '3.13'
       - run: python tools/check_launcher.py
+
+  # Opens the page in a real browser against the pretend game and uses it the way a person would.
+  page:
+    name: Page in a browser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - run: npm install --no-save --no-package-lock playwright@1.63.0
+      - run: npx playwright install --with-deps chromium
+      - run: python tools/check_page.py

@@ -10,12 +10,16 @@ need it.
 **My Mac will not open the starter.** Right-click `Start on Mac.command` and choose **Open**. If that does not
 offer to open it, go to System Settings > Privacy & Security, scroll down, and press **Open Anyway**.
 
-**It says it needs Python.** Install Python 3.11 or newer from [python.org](https://www.python.org/downloads/).
-On Windows, tick **Add python.exe to PATH** in the installer. Then double-click the starter again.
+**It says it needs Python.** Install Python 3.13 from [python.org](https://www.python.org/downloads/). The big
+button there gives you the very newest Python, which is too new for this, so pick 3.13 from the list of
+versions. On Windows, tick **Add python.exe to PATH** in the installer. Then double-click the starter again.
 
-**Setting up does not finish.** Check your internet connection and try again. If it still fails and you have a
-brand new version of Python, install Python 3.13 instead: the newest version is sometimes too new for the parts
-this needs.
+**Setting up does not finish.** Check your internet connection and try again. If the text window says your
+Python may be too new, install Python 3.13 as well. You do not have to remove the one you have: the starter
+picks the one that works.
+
+Which Pythons work: 3.11, 3.12 and 3.13 everywhere, and 3.14 on Windows and on Macs with an Apple chip.
+Anything newer has to wait until the parts this needs catch up.
 
 **The page did not open.** The text window shows its address, normally `http://127.0.0.1:8765/`. Type that into
 your browser.

@@ -47,7 +47,8 @@ on your computer.
 On real Windows and Mac machines provided by GitHub, for every change:
 
 - **The starter.** `tools/check_launcher.py` starts the app the way you do, including the one-time set-up, waits
-  for the page, starts it a second time, and quits.
+  for the page, starts it a second time, and quits. Those machines have several Pythons installed, one of them
+  too new, so this also checks that the starter picks one that works.
 - **The parts that touch your system.** `tools/desktop_probe.py` runs the bot's own code against a test window:
   finding the window, bringing it to the front, taking its picture, seeing the splash, pressing a key and
   right-clicking, and a whole cast with the real fishing loop. It also checks that moving the mouse pauses it.

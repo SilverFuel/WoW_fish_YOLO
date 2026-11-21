@@ -48,14 +48,15 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - run: python tools/desktop_probe.py
 
-  # Starts the app the way a person does, by double-clicking the launcher, including the one-time set-up.
+  # Starts the app the way a person does, by its starter, including the one-time set-up.
+  # The build machines have several Pythons installed, some too new, so this also checks the starter picks one that works.
   launcher:
     name: Launcher / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest, macos-latest, macos-15-intel]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6

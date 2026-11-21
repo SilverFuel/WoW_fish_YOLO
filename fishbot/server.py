@@ -27,6 +27,7 @@ STATIC = {'/app.js': ('app.js', 'text/javascript; charset=utf-8'),
           '/favicon.svg': ('favicon.svg', 'image/svg+xml')}
 APP_NAME = 'wow-fish-yolo'
 MAX_BODY_BYTES = 64 * 1024
+MAX_DISCARD_BYTES = 1024 * 1024  # how much of a refused request is read and dropped so the reply still arrives
 MAX_JSON_DEPTH = 32
 DEFAULT_PORT = 8765
 PORT_ATTEMPTS = 20
@@ -137,8 +138,7 @@ class AppServer:
             return service.check_setup()
         if path == '/api/quit':
             service.stop('Stopped: the app is closing.')
-            self.close()
-            return {}
+            return {}  # the request handler closes the app once this reply has been sent
         if path == '/api/assistant/test':
             return self.assistant.test()
         if path == '/api/assistant/chat':
@@ -188,6 +188,16 @@ class Handler(BaseHTTPRequestHandler):
         except OSError:
             pass
 
+    def _discard(self, length):
+        """Read and drop the body of a refused request. Closing on unread data resets the connection,
+        and the sender would see a network error instead of the reason."""
+        remaining = min(max(length, 0), MAX_DISCARD_BYTES)
+        while remaining > 0:
+            chunk = self.rfile.read(min(remaining, 64 * 1024))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+
     def _check_host(self):
         if self.headers.get('Host', '') not in self.app.allowed_hosts():
             raise BadRequest(403, 'This address is not allowed.')
@@ -209,6 +219,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             raise BadRequest(411, 'Content-Length is required.') from None
         if not 0 <= length <= MAX_BODY_BYTES:
+            self._discard(length)
             raise BadRequest(413, 'The request is too large.')
 
         data = self.rfile.read(length) or b'{}'
@@ -264,7 +275,10 @@ class Handler(BaseHTTPRequestHandler):
             self._check_host()
             self._check_token()
             body = self._read_json()
-            self._send_json(self.app.api_post(urlparse(self.path).path, body))
+            path = urlparse(self.path).path
+            self._send_json(self.app.api_post(path, body))
+            if path == '/api/quit':
+                self.app.close()  # only now: closing first can end the app before the reply is out
         except BadRequest as error:
             self._fail(error.status, error.message)
         except Exception:

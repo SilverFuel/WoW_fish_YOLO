@@ -103,6 +103,8 @@ def test_posts_must_be_json_objects_of_a_sane_size(app):
     assert call_json(app, 'POST', '/api/settings', b'{not json')[0] == 400
     assert call_json(app, 'POST', '/api/settings', [1, 2])[0] == 400
     assert call_json(app, 'POST', '/api/settings', {'fishing_key': 'f' * 100_000})[0] == 413
+    # Big enough that the sender is still sending when the refusal is decided; the reason must still arrive.
+    assert call_json(app, 'POST', '/api/settings', {'fishing_key': 'f' * 900_000}) == (413, {'error': 'The request is too large.'})
     assert call_json(app, 'POST', '/api/pause', {'paused': 'yes'})[0] == 400
 
 
@@ -226,6 +228,14 @@ def test_assistant_chat_is_refused_while_switched_off(app):
 
     assert status == 409
     assert result == {'error': 'Turn the assistant on first.'}
+
+
+def test_quit_answers_before_the_app_closes(app):
+    # Closing first can end the app before the answer is out, and the page then sees a cut-off reply.
+    assert app.api_post('/api/quit', {}) == {}
+
+    app.thread.join(1)
+    assert app.thread.is_alive()
 
 
 def test_quit_stops_the_server(app):

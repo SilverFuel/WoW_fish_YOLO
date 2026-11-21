@@ -9,8 +9,9 @@ You run it from one simple page in your browser, on Windows or Mac.
 
 ## Start in three steps
 
-1. **Get Python** (it is free), version 3.11 or newer, from [python.org](https://www.python.org/downloads/).
-   On Windows, tick **Add python.exe to PATH** in the installer.
+1. **Get Python 3.13** (it is free) from [python.org](https://www.python.org/downloads/). Choose version
+   **3.13**, not the very newest one, which is too new for this. On Windows, tick **Add python.exe to PATH**
+   in the installer.
 2. **Get this folder.** Press the green **Code** button on this page, choose **Download ZIP**, and unzip it.
 3. **Double-click the starter** inside the folder:
    - Windows: `Start on Windows.bat`

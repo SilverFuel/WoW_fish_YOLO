@@ -22,6 +22,16 @@ def test_lure_needs_a_key_only_when_it_is_switched_on():
     assert problems_before_start(Settings(fishing_key='f', lure_enabled=True, lure_key='l')) == []
 
 
+def test_safeguards_are_on_by_default():
+    defaults = Settings()
+
+    assert defaults.pause_on_mouse_move is True
+    assert defaults.stop_after_misses == 5
+    assert defaults.practice_mode is False
+    assert change({'practice_mode': True, 'pause_on_mouse_move': False})[1] == {}
+    assert list(change({'practice_mode': 'on'})[1]) == ['practice_mode']
+
+
 def test_valid_changes_are_applied_and_normalised():
     settings, errors = change({'fishing_key': ' F ', 'cast_seconds': '30', 'confidence': 0.7,
                                'scan_area': 'center50', 'lure_enabled': True, 'stop_hotkey': 'F10'})

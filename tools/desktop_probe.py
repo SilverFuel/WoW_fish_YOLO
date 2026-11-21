@@ -384,6 +384,36 @@ def main():
                         f'right-clicks: {clicks}; picture just before the cast: {before_cast}; '
                         f'first calls: {trace if not passed else trace[:12]}')
 
+    @check('moving the mouse makes the bot let go')
+    def _():
+        # A cast that never sees a splash, during which "the user" moves the mouse.
+        class SeesNothing:
+            last = None
+
+            def find_splash(self, region):
+                return None
+
+        events.clear()
+        messages = []
+        bot = FishingBot(Settings(fishing_key='f', stop_after_misses=0), window, SeesNothing(), controls, log=messages.append)
+        thread = threading.Thread(target=bot.run, daemon=True)
+        thread.start()
+        deadline = time.monotonic() + 15
+        while ('key', 'f') not in events and time.monotonic() < deadline:
+            pump(0.1)
+        pump(1.5)
+        paused_before = bot.paused
+        controls.moveTo(inside[0] + 230, inside[1] + 120, 0.1)
+        pump(1.5)
+        paused_after = bot.paused
+        bot.stop()
+        pump(0.3)
+        thread.join(5)
+        clicks = [event for event in events if event[0] == 'button']
+        return (not paused_before) and paused_after and not clicks, (
+            f'paused before the mouse moved: {paused_before}, after: {paused_after}; clicks sent: {clicks}; '
+            f'log: {messages[-2:]}')
+
     if platform.SYSTEM == 'macos':
         @check('whether a function key pressed by a program disturbs later keys (information)')
         def _():

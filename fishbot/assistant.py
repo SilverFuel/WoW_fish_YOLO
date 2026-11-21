@@ -39,7 +39,9 @@ SUGGESTABLE = {
     'checks_per_second': 'how often it looks for the splash (default 5)',
     'cpu_threads': 'CPU threads for the detector (default 2)',
     'stop_after_minutes': 'stop after this many minutes, 0 = no limit',
-    'stop_after_misses': 'stop after this many casts in a row with no catch, 0 = off (default 10)',
+    'stop_after_misses': 'stop after this many casts in a row with no catch, 0 = off (default 5)',
+    'practice_mode': 'true = watch only: report what it would click without pressing or clicking anything',
+    'pause_on_mouse_move': 'true (default) = pause as soon as the user moves the mouse',
     'pause_hotkey': '"f1" to "f12"',
     'stop_hotkey': '"f1" to "f12"',
 }
@@ -54,7 +56,9 @@ How the bot works:
   When it sees the bobber splash it right-clicks the bobber. Auto Loot must be on in the game.
 - It only sends keys and clicks while the game is the window in front.
 - The model was trained in first-person view with the game interface hidden (Alt+Z).
-- "Check now" on the page shows what the bot sees and the area it scans.
+- "Check now" on the page shows what the bot sees and the area it scans. "Recent clicks" shows what it clicked.
+- It stops by itself when things stop looking like fishing: several misses in a row, splashes that come too
+  soon or always on the same spot, constant recasting, or a black screen. It pauses when the user moves the mouse.
 
 Common problems:
 - Every cast misses: not in first-person view; interface not hidden; the bobber lands outside the scanned area
@@ -68,6 +72,8 @@ Rules:
 - Keep answers short and in plain language.
 - Suggest changes only when the user asks for them or they clearly fix the problem described.
 - Only use the settings listed below, with values in the allowed range.
+- Do not suggest switching a safeguard off (pause_on_mouse_move, stop_after_misses, stop_after_minutes)
+  unless the user asks for exactly that. For a first run or after a problem, suggest practice_mode.
 - Do not help with hiding the bot from the game or its operator. Say you cannot help with that.
 """
 

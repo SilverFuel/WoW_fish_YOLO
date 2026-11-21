@@ -22,6 +22,7 @@ HOTKEY_POLL_SEC = 0.03
 FOCUS_WAIT_SEC = 3.0
 FOCUS_SETTLE_SEC = 0.6
 LOG_LINES = 300
+CLICKS_KEPT = 6
 
 
 class BotService:
@@ -47,6 +48,9 @@ class BotService:
         self._last_stats = Stats()
         self._last_elapsed = 0.0
         self._message = ''
+        self._stopped_by_safeguard = False
+        self._clicks = collections.deque(maxlen=CLICKS_KEPT)  # what was clicked, newest last
+        self._click_id = 0
 
     # ----- log -----
 
@@ -86,6 +90,7 @@ class BotService:
             self._starting = True
             self._stop_while_starting = None
             self._message = ''
+            self._stopped_by_safeguard = False
             self._thread = threading.Thread(target=self._run, args=(settings, window), name='fishing', daemon=True)
             self._thread.start()
             return []
@@ -132,14 +137,16 @@ class BotService:
         try:
             vision = Vision(self._detector_for(settings.cpu_threads), self._grabber,
                             settings.confidence, settings.scan_area)
-            bot = FishingBot(settings, window, vision, self._controls_once(), log=self.log)
+            bot = FishingBot(settings, window, vision, self._controls_once(), log=self.log,
+                             on_click=lambda x, y, practice: self._remember_click(vision, x, y, practice))
             with self._lock:
                 self._bot, self._vision = bot, vision
                 self._starting = False
                 if self._stop_while_starting is not None:
                     bot.stop(self._stop_while_starting)
 
-            self.log(f'Started. {settings.pause_hotkey.upper()} pauses, {settings.stop_hotkey.upper()} stops.')
+            if not settings.practice_mode:
+                self.log(f'Started. {settings.pause_hotkey.upper()} pauses, {settings.stop_hotkey.upper()} stops.')
             threading.Thread(target=self._watch_hotkeys, args=(bot, settings, finished),
                              name='hotkeys', daemon=True).start()
             bot.run()
@@ -157,6 +164,7 @@ class BotService:
             if bot is not None:
                 self._last_stats = bot.stats
                 self._last_elapsed = bot.elapsed_seconds()
+                self._stopped_by_safeguard = bot.stopped_by_safeguard
                 if self._vision is not None and self._vision.last is not None:
                     self._sighting = self._vision.last
                     self._preview_id += 1
@@ -164,6 +172,24 @@ class BotService:
             self._starting = False
             self._message = message
         self.log(message, level)
+
+    def _remember_click(self, vision, x, y, practice):
+        """Keep the picture the bot acted on, so a wrong click can be looked at afterwards."""
+        sighting = vision.last
+        if sighting is None:
+            return
+        picture = render_preview(sighting)
+        with self._lock:
+            self._click_id += 1
+            self._clicks.append({'id': self._click_id, 'time': time.time(), 'x': x, 'y': y, 'practice': practice,
+                                 'score': round(sighting.detection.score, 3), 'picture': picture})
+
+    def click_jpeg(self, click_id):
+        with self._lock:
+            for click in self._clicks:
+                if click['id'] == click_id:
+                    return click['picture']
+        return None
 
     def _watch_hotkeys(self, bot, settings, finished):
         """Poll the two hotkeys while a session runs. Polling needs no keyboard hook."""
@@ -267,6 +293,10 @@ class BotService:
                 'state': state,
                 'running': self.running,
                 'message': self._message,
+                # The last session ended because a safeguard stopped it, not because the user did.
+                'stopped_by_safeguard': self._stopped_by_safeguard and bot is None,
+                'clicks': [{name: value for name, value in click.items() if name != 'picture'}
+                           for click in reversed(self._clicks)],
                 'stats': dict(asdict(stats), elapsed_seconds=round(elapsed),
                               inference_ms=round(self._detector.last_inference_ms) if self._detector else 0,
                               best_score=round(sighting.detection.score, 3) if sighting is not None else None),

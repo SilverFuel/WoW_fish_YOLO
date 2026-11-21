@@ -240,6 +240,12 @@ class Handler(BaseHTTPRequestHandler):
                 if picture is None:
                     raise BadRequest(404, 'No picture yet.')
                 return self._send(200, picture, 'image/jpeg')
+            if url.path == '/api/click.jpg':
+                number = parse_qs(url.query).get('id', [''])[0]
+                picture = self.app.service.click_jpeg(int(number)) if number.isdigit() else None
+                if picture is None:
+                    raise BadRequest(404, 'That click is no longer kept.')
+                return self._send(200, picture, 'image/jpeg')
             return self._send_json(self.app.api_get(url.path, parse_qs(url.query)))
         except BadRequest as error:
             self._fail(error.status, error.message)

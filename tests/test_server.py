@@ -206,6 +206,21 @@ def test_preview_is_404_before_any_picture_and_check_provides_one(app):
     assert call(app, 'GET', '/api/preview.jpg')[0].status == 200
 
 
+def test_pictures_of_recent_clicks_are_served(app):
+    assert call(app, 'GET', '/api/click.jpg?id=1')[0].status == 404
+    assert call(app, 'GET', '/api/click.jpg?id=abc')[0].status == 404
+    assert call(app, 'GET', '/api/click.jpg?id=1', token=False)[0].status == 403
+
+    call_json(app, 'POST', '/api/settings', {'fishing_key': 'f', 'checks_per_second': 15})
+    call_json(app, 'POST', '/api/start', {})
+    assert wait_for(lambda: call_json(app, 'GET', '/api/state')[1]['clicks'] != [])
+
+    click = call_json(app, 'GET', '/api/state')[1]['clicks'][0]
+    response, picture = call(app, 'GET', f'/api/click.jpg?id={click["id"]}')
+    assert response.status == 200 and response.getheader('Content-Type') == 'image/jpeg'
+    assert picture[:2] == b'\xff\xd8'
+
+
 def test_assistant_chat_is_refused_while_switched_off(app):
     status, result = call_json(app, 'POST', '/api/assistant/chat', {'messages': [{'role': 'user', 'content': 'hi'}]})
 

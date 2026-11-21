@@ -76,8 +76,45 @@ Settings are saved as you change them and can be changed while the bot is stoppe
 | Area to scan | Whole window, or only the middle 75% or 50%. A smaller area needs much less CPU. |
 | Looks per second | How often it checks for the splash. 4 to 6 is plenty. |
 | CPU threads | Threads used by the detector. |
-| Time limit, missed casts | Stop after a number of minutes, or after several casts in a row that catch nothing. |
+| Practice mode | Watch only: the bot shows what it would click and sends nothing. |
+| Pause when I move the mouse | Take the mouse and the bot lets go until you resume. On by default. |
+| Time limit, missed casts | Stop after a number of minutes, or after several casts in a row that catch nothing (5 by default). |
 | Cast time, confidence | Under Advanced. The defaults are the tested values. |
+
+## Safeguards, and what to do when something goes wrong
+
+The bot presses keys and clicks in a game it cannot really understand, so it is built to act only when it is safe,
+to click only what plausibly is a bite, and to stop and say why as soon as things stop looking like fishing.
+
+| What can go wrong | What the bot does about it |
+|---|---|
+| Keys or clicks reach another program | It only sends input while the game is in front and has the keyboard. Otherwise it waits. |
+| You need the mouse back | Move it and the bot pauses at once. `F8` pauses, `F9` stops, as do the buttons on the page and moving the mouse into a screen corner. |
+| It mistakes something else for a bite | Before every click: nothing is accepted in the first second after casting, at the edge of the window, or of the wrong size for a splash. |
+| It keeps clicking the same wrong thing | It stops when 3 "bites" in a row come within 2 seconds of casting, or 4 in a row are on exactly the same spot. A real bobber does neither. |
+| Something keeps cutting the cast short | It stops after 8 recasts in 20 seconds instead of hammering the key. |
+| Nothing is caught any more (full bags, wrong key, a window opened, combat) | It stops after 5 misses in a row. |
+| Loading screen or disconnect | It stops after a few seconds of black screen. |
+| It is left running | An optional time limit stops it. |
+| The bot itself fails | It stops, reports the error on the page, and the page keeps working. |
+
+**It never tries to repair things by pressing more keys.** In the game, Esc closes an open window but opens the
+menu when nothing is open, so a blind "recovery" key press can make things worse. When in doubt the bot stops,
+sends nothing further, and leaves the game to you.
+
+When the bot stops itself, the page says why and shows what to do:
+
+1. Look at the game. If a window opened or something got targeted, close or clear it with Esc.
+2. Open **Recent clicks**. It keeps the last six clicks with the picture the bot acted on and the box it clicked,
+   so you can see what it took for a splash.
+3. Fix the cause, then run **Practice mode** before fishing again. In practice mode the bot only watches: you
+   cast yourself, and it reports each spot it would have clicked without pressing or clicking anything. It is
+   also the safest way to do a first run.
+
+What the safeguards cannot do: the bot cannot see what a click actually hit, so one wrong click can still happen
+before a pattern shows; at worst two or three before it stops. Keys go to the chat box if you leave one open.
+And like the rest of the bot, the safeguards are tested against a simulated game and a test window, not the game
+itself. If "Pause when I move the mouse" triggers when you did not touch the mouse, switch it off under Safety.
 
 ### macOS permissions
 

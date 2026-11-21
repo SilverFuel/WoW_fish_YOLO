@@ -10,6 +10,7 @@ const STATUS = {
   starting: ['Starting…', 'Loading the model.'],
   waiting: ['Waiting for the game', 'Click on the game window. Nothing is sent to other windows.'],
   fishing: ['Fishing', 'Watching for the splash.'],
+  practice: ['Practice mode', 'Watching only. Cast in the game yourself; nothing is pressed or clicked.'],
   paused: ['Paused', 'Press Resume here, or the pause key in the game.'],
   stopped: ['Stopping…', ''],
 };
@@ -29,6 +30,8 @@ let previewUrl = null;
 let previewAt = 0;
 let savedTimer = null;
 let closed = false;
+let clicksShown = '';
+const clickPictures = new Map(); // click id -> object URL of its picture
 const chat = [];
 
 async function api(path, body) {
@@ -138,6 +141,16 @@ function renderStatus() {
   }));
   list.hidden = problems.length === 0;
 
+  // A stop the bot decided on itself needs the user's attention, wherever they are looking.
+  const stoppedItself = !state.running && state.stopped_by_safeguard;
+  $('recovery').hidden = !stoppedItself;
+  document.title = `${stoppedItself ? 'Stopped itself' : title} – WoW Fish YOLO`;
+
+  const practice = state.settings.practice_mode;
+  $('start').textContent = practice ? 'Start practice' : 'Start fishing';
+  $('stat-looted-label').textContent = practice ? 'Would click' : 'Caught';
+  $('hint-mouse').hidden = !state.settings.pause_on_mouse_move;
+
   $('start').hidden = state.running;
   $('start').disabled = state.problems.length > 0;
   $('pause').hidden = !state.running;
@@ -150,7 +163,7 @@ function renderStatus() {
 
   const stats = state.stats;
   $('stat-casts').textContent = stats.casts;
-  $('stat-looted').textContent = stats.looted;
+  $('stat-looted').textContent = practice ? stats.practice_clicks : stats.looted;
   $('stat-missed').textContent = stats.missed;
   $('stat-time').textContent = clock(stats.elapsed_seconds);
   $('stat-speed').textContent = stats.inference_ms ? `${stats.inference_ms} ms` : '–';
@@ -201,6 +214,62 @@ async function loadPreview() {
   }
 }
 
+async function clickPicture(id) {
+  if (!clickPictures.has(id)) {
+    const response = await fetch(`/api/click.jpg?id=${id}`, { headers: { 'X-Fishbot-Token': token } });
+    if (!response.ok) return null;
+    clickPictures.set(id, URL.createObjectURL(await response.blob()));
+  }
+  return clickPictures.get(id);
+}
+
+function clickCaption(click) {
+  const time = new Date(click.time * 1000).toLocaleTimeString([], { hour12: false });
+  const what = click.practice ? 'Would have clicked' : 'Clicked';
+  return `${what} at ${time} · x ${click.x}, y ${click.y} · ${Math.round(click.score * 100)}% sure`;
+}
+
+async function renderClicks(clicks) {
+  const shown = clicks.map((click) => click.id).join(',');
+  if (shown === clicksShown) return;
+  clicksShown = shown;
+
+  $('clicks-block').hidden = clicks.length === 0;
+  const items = [];
+  for (const click of clicks) {
+    const item = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'click';
+    button.title = clickCaption(click);
+    const image = document.createElement('img');
+    image.alt = clickCaption(click);
+    const url = await clickPicture(click.id);
+    if (url) image.src = url;
+    const label = document.createElement('span');
+    label.textContent = `${new Date(click.time * 1000).toLocaleTimeString([], { hour12: false })}${click.practice ? ' · practice' : ''}`;
+    button.append(image, label);
+    button.addEventListener('click', () => {
+      $('click-picture').src = image.src;
+      $('click-caption').textContent = clickCaption(click);
+      $('click-dialog').showModal();
+    });
+    item.append(button);
+    items.push(item);
+  }
+  if (shown !== clicksShown) return; // a newer list arrived while the pictures loaded
+  $('clicks').replaceChildren(...items);
+
+  // Let go of pictures the app no longer keeps.
+  const kept = new Set(clicks.map((click) => click.id));
+  for (const [id, url] of clickPictures) {
+    if (!kept.has(id)) {
+      URL.revokeObjectURL(url);
+      clickPictures.delete(id);
+    }
+  }
+}
+
 function render(next) {
   const first = state === null;
   state = next;
@@ -210,6 +279,7 @@ function render(next) {
   renderStatus();
   appendLog(next.log);
   cursor = Math.max(cursor, next.log_cursor);
+  renderClicks(next.clicks);
 
   if (next.preview && next.preview !== previewTag) {
     const live = next.preview.startsWith('live-');

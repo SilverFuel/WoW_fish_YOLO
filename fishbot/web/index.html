@@ -41,19 +41,28 @@
 
       <ul id="problems" class="problems" hidden></ul>
 
+      <div id="recovery" class="recovery" hidden>
+        <strong>The bot stopped itself and is sending nothing. Before you start again:</strong>
+        <ol>
+          <li>Look at the game. If a window opened or something got targeted, close or clear it with Esc.</li>
+          <li>Open <a href="#clicks-title">Recent clicks</a> to see exactly what the bot clicked.</li>
+          <li>Fix the cause, then run <a href="#practice_mode">Practice mode</a> first: it shows what the bot would click without pressing or clicking anything.</li>
+        </ol>
+      </div>
+
       <div class="actions">
         <button id="start" class="button primary large" type="button">Start fishing</button>
         <button id="pause" class="button large" type="button" hidden>Pause</button>
         <button id="stop" class="button danger large" type="button" hidden>Stop</button>
       </div>
       <p class="hint">
-        Inside the game: <kbd id="hint-pause">F8</kbd> pauses, <kbd id="hint-stop">F9</kbd> stops.
+        Inside the game: <kbd id="hint-pause">F8</kbd> pauses, <kbd id="hint-stop">F9</kbd> stops<span id="hint-mouse">, and moving the mouse makes the bot let go</span>.
         The bot only presses keys and clicks while the game is the window in front.
       </p>
 
       <dl class="stats">
         <div><dt>Casts</dt><dd id="stat-casts">0</dd></div>
-        <div><dt>Caught</dt><dd id="stat-looted">0</dd></div>
+        <div><dt id="stat-looted-label">Caught</dt><dd id="stat-looted">0</dd></div>
         <div><dt>Missed</dt><dd id="stat-missed">0</dd></div>
         <div><dt>Time</dt><dd id="stat-time">0:00</dd></div>
         <div><dt>Per look</dt><dd id="stat-speed">–</dd></div>
@@ -75,8 +84,20 @@
         <meter id="score-meter" min="0" max="1" value="0"></meter>
         <span id="score-text" class="muted">–</span>
       </div>
-      <p class="hint">Green box: a splash the bot would loot. Orange box: its best guess, not confident enough. Blue outline: the area it scans.</p>
+      <p class="hint">Green box: a splash the bot would loot. Orange box: its best guess, not confident enough or not plausible. Blue outline: the area it scans.</p>
+
+      <div id="clicks-block" hidden>
+        <h3 id="clicks-title">Recent clicks</h3>
+        <p class="help">What the bot saw each time it clicked, newest first. Select one to enlarge it.</p>
+        <ol id="clicks" class="clicks"></ol>
+      </div>
     </section>
+
+    <dialog id="click-dialog" aria-labelledby="click-caption">
+      <img id="click-picture" alt="The picture the bot acted on, with the box it clicked">
+      <p id="click-caption"></p>
+      <form method="dialog"><button class="button" type="submit">Close</button></form>
+    </dialog>
 
     <section class="card" aria-labelledby="log-title">
       <h2 id="log-title">Activity</h2>
@@ -161,7 +182,21 @@
         </div>
         <p class="field-error" data-error-for="cpu_threads"></p>
 
-        <h3>Stop automatically</h3>
+        <h3>Safety</h3>
+        <div class="field">
+          <div class="field-text">
+            <label class="label" for="practice_mode">Practice mode</label>
+            <span class="help">Watch only. The bot shows what it would click without pressing or clicking anything; you cast in the game yourself. Use it for a first run, or after something went wrong.</span>
+          </div>
+          <input class="switch" type="checkbox" id="practice_mode" data-setting="practice_mode">
+        </div>
+        <div class="field">
+          <div class="field-text">
+            <label class="label" for="pause_on_mouse_move">Pause when I move the mouse</label>
+            <span class="help">Take the mouse and the bot lets go at once. It continues when you press Resume or the pause key.</span>
+          </div>
+          <input class="switch" type="checkbox" id="pause_on_mouse_move" data-setting="pause_on_mouse_move">
+        </div>
         <div class="field">
           <div class="field-text">
             <label class="label" for="stop_after_minutes">Time limit</label>

@@ -31,7 +31,9 @@ class Settings:
     checks_per_second: int = 5
     cpu_threads: int = 2
     stop_after_minutes: int = 0
-    stop_after_misses: int = 10
+    stop_after_misses: int = 5
+    practice_mode: bool = False
+    pause_on_mouse_move: bool = True
     assistant_enabled: bool = False
     assistant_url: str = 'http://localhost:11434/v1'
     assistant_model: str = 'qwen3:8b'
@@ -53,7 +55,8 @@ LABELS = {'fishing_key': 'Fishing key', 'lure_key': 'Lure key', 'lure_minutes': 
           'cpu_threads': 'CPU threads', 'stop_after_minutes': 'Stop after minutes',
           'stop_after_misses': 'Stop after misses', 'assistant_url': 'Assistant server',
           'assistant_model': 'Assistant model', 'lure_enabled': 'Use a lure',
-          'assistant_enabled': 'Assistant'}
+          'assistant_enabled': 'Assistant', 'practice_mode': 'Practice mode',
+          'pause_on_mouse_move': 'Pause when the mouse is moved'}
 
 
 def _coerce(name, value):

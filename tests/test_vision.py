@@ -199,6 +199,50 @@ def test_preview_is_a_jpeg_no_wider_than_the_preview_width(splash_detector, spla
     assert image.shape[0] == 405
 
 
+def test_a_confident_sighting_at_the_edge_of_the_window_is_not_accepted(splash_detector, splash):
+    # The window is placed so that the splash sits 15 pixels from its left edge.
+    canvas = np.zeros((360, 1200, 3), dtype=np.uint8)
+    canvas[:, :640] = splash
+    window = {'left': SPLASH_CENTER[0] - 15, 'top': 0, 'width': 640, 'height': 360}
+    watcher = vision.Vision(splash_detector, ArrayGrabber(canvas), confidence=0.8, scan_area='full')
+
+    assert watcher.find_splash(window) is None
+    assert watcher.last.detection.score > 0.8  # the model was sure
+    assert watcher.last.confident is False
+    assert watcher.last.note == 'at the edge of the window, where the bobber does not land'
+
+
+@pytest.mark.parametrize('position, box, expected', [
+    ((960, 540), (80, 60), ''),
+    ((100 + 97, 50 + 540), (80, 60), ''),                 # just inside the 5% margin
+    ((100 + 60, 50 + 540), (80, 60), 'edge'),             # left edge
+    ((100 + 1900, 50 + 540), (80, 60), 'edge'),           # right edge
+    ((960, 50 + 20), (80, 60), 'edge'),                   # top edge
+    ((960, 50 + 1070), (80, 60), 'edge'),                 # bottom edge
+    ((960, 540), (900, 60), 'size'),                      # far too wide
+    ((960, 540), (80, 500), 'size'),                      # far too tall
+    ((960, 540), (4, 3), 'size'),                         # a speck
+])
+def test_implausible_judges_position_and_size_against_the_window(position, box, expected):
+    window = {'left': 100, 'top': 50, 'width': 1920, 'height': 1080}
+
+    assert expected in vision.implausible(position, box, window)
+    assert bool(vision.implausible(position, box, window)) == bool(expected)
+
+
+def test_black_pictures_are_counted_in_a_row(splash_detector, calm):
+    black = ArrayGrabber(np.zeros((360, 640, 3), dtype=np.uint8))
+    watcher = vision.Vision(splash_detector, black, confidence=0.8, scan_area='full')
+
+    for _ in range(3):
+        watcher.find_splash(dict(demo.REGION))
+    assert watcher.blank_streak == 3
+
+    black.picture = calm
+    watcher.find_splash(dict(demo.REGION))
+    assert watcher.blank_streak == 0
+
+
 def test_blank_capture_is_recognised():
     assert vision.looks_blank(np.zeros((10, 10, 3), dtype=np.uint8))
     assert not vision.looks_blank(np.full((10, 10, 3), 40, dtype=np.uint8))

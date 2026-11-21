@@ -160,13 +160,14 @@ kbd {
 
 .dot { flex: none; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); }
 .dot.fishing { background: var(--good); box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 60%, transparent); animation: pulse 1.8s infinite; }
+.dot.practice { background: var(--info); box-shadow: 0 0 0 0 color-mix(in srgb, var(--info) 60%, transparent); animation: pulse 1.8s infinite; }
 .dot.paused { background: var(--warn); }
 .dot.waiting, .dot.starting { background: var(--info); }
 @keyframes pulse {
   70% { box-shadow: 0 0 0 10px transparent; }
   100% { box-shadow: 0 0 0 0 transparent; }
 }
-@media (prefers-reduced-motion: reduce) { .dot.fishing { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .dot.fishing, .dot.practice { animation: none; } }
 
 .problems {
   margin-top: 14px; padding: 10px 14px; border-radius: 10px; background: var(--warn-soft); color: var(--warn);
@@ -199,6 +200,34 @@ kbd {
 .score label { font-weight: 600; white-space: nowrap; }
 .score meter { flex: 1; min-width: 60px; height: 10px; }
 .score span { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.recovery {
+  margin-top: 14px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--bad);
+  background: var(--bad-soft); color: var(--text);
+}
+.recovery strong { display: block; color: var(--bad); }
+.recovery ol { list-style: decimal; margin: 8px 0 0 20px; display: grid; gap: 4px; font-size: 14px; }
+.recovery a { color: inherit; font-weight: 600; }
+
+#clicks-block { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 4px; }
+#clicks-block h3 { margin-top: 10px; }
+.clicks { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-top: 8px; }
+.click {
+  appearance: none; display: grid; gap: 3px; width: 100%; padding: 4px; cursor: pointer; text-align: center;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--field); font-size: 12px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.click:hover { border-color: var(--accent); }
+.click img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; background: #0b1116; display: block; }
+
+dialog {
+  width: min(92vw, 860px); padding: 14px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--card); color: var(--text); box-shadow: var(--shadow);
+}
+dialog::backdrop { background: rgba(8, 14, 20, 0.6); }
+dialog img { width: 100%; border-radius: 8px; display: block; background: #0b1116; }
+dialog p { margin: 10px 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+dialog form { display: flex; justify-content: flex-end; }
 
 /* ----- log ----- */
 

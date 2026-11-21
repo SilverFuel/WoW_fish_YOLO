@@ -11,6 +11,10 @@ from fishbot.settings import SCAN_AREAS
 
 PREVIEW_WIDTH = 720
 CANDIDATE_SCORE = 0.05  # below this the best box is noise and is not drawn
+# A bobber does not land at the very edge of the window, where the game's interface sits.
+EDGE_MARGIN = 0.05
+# A splash is a small part of the picture: its box is between these shares of the window's width and height.
+SMALLEST_BOX, LARGEST_BOX = 0.005, 0.35
 
 
 class ScreenGrabber:
@@ -44,6 +48,7 @@ class Sighting:
     confident: bool
     offset: tuple = (0, 0)  # where the scanned area starts inside ``frame``, in pixels
     scan_size: tuple | None = None  # (width, height) of the scanned area in pixels, if it is a part
+    note: str = ''  # why a confident candidate was not accepted, in words
 
 
 class Vision:
@@ -54,23 +59,29 @@ class Vision:
         self._fraction, self._size = SCAN_AREAS[scan_area]
         self.last = None
         self.looks = 0  # how many pictures have been taken; lets the page tell a new one from the last
+        self.blank_streak = 0  # how many pictures in a row were black
 
     def find_splash(self, region):
         """Return the screen position of the splash inside the window ``region``, or None."""
         scan = scan_region(region, self._fraction)
         frame = self._grabber.grab(scan)
         detection = self._detector.detect(frame, self._size)
-        confident = detection.score >= self._confidence
-        self.last = Sighting(frame, detection, confident)
         self.looks += 1
-
-        if not confident:
-            return None
+        self.blank_streak = self.blank_streak + 1 if looks_blank(frame) else 0
 
         # Frame pixels are not always screen units (scaled displays), so convert explicitly.
+        to_screen_x, to_screen_y = scan['width'] / frame.shape[1], scan['height'] / frame.shape[0]
         center_x, center_y = detection.center
-        return (scan['left'] + int(center_x * scan['width'] / frame.shape[1]),
-                scan['top'] + int(center_y * scan['height'] / frame.shape[0]))
+        position = (scan['left'] + int(center_x * to_screen_x), scan['top'] + int(center_y * to_screen_y))
+
+        note = ''
+        if detection.score >= self._confidence:
+            box = ((detection.x2 - detection.x1) * to_screen_x, (detection.y2 - detection.y1) * to_screen_y)
+            note = implausible(position, box, region)
+        confident = detection.score >= self._confidence and not note
+        self.last = Sighting(frame, detection, confident, note=note)
+
+        return position if confident else None
 
     def survey(self, region):
         """Look at the whole window once, for the setup check: scans the same area the bot would."""
@@ -84,6 +95,23 @@ class Vision:
                              offset=(left, top), scan_size=(scan_width, scan_height))
         self.looks += 1
         return self.last
+
+
+def implausible(position, box, region):
+    """Why a confident sighting should still not be clicked, in words; '' if it looks like a bite.
+
+    ``position`` and ``box`` (width, height) are in screen units; ``region`` is the game window.
+    """
+    x, y = position[0] - region['left'], position[1] - region['top']
+    width, height = region['width'], region['height']
+
+    if not (EDGE_MARGIN * width <= x <= (1 - EDGE_MARGIN) * width
+            and EDGE_MARGIN * height <= y <= (1 - EDGE_MARGIN) * height):
+        return 'at the edge of the window, where the bobber does not land'
+    if not (SMALLEST_BOX * width <= box[0] <= LARGEST_BOX * width
+            and SMALLEST_BOX * height <= box[1] <= LARGEST_BOX * height):
+        return 'the wrong size for a splash'
+    return ''
 
 
 def render_preview(sighting):

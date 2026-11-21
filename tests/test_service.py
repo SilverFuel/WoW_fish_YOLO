@@ -15,7 +15,7 @@ class DemoPlatform:
 
     SYSTEM, LABEL, SETUP_NOTES = demo.SYSTEM, demo.LABEL, demo.SETUP_NOTES
 
-    def __init__(self, bite_after=(0.3, 0.5)):
+    def __init__(self, bite_after=(2.1, 2.3)):  # a bite sooner than 2 s after casting counts as suspicious
         self.game = demo.DemoGame(bite_after=bite_after)
         self.keys_down = set()
         self.window_missing = False
@@ -119,15 +119,74 @@ def test_fishes_end_to_end_with_the_real_detector(service, platform):
     kinds = [event[0] for event in platform.game.events]
     assert kinds[:3] == ['press', 'move', 'click']
     assert platform.game.events[0] == ('press', 'f')
-    # The click lands on the synthetic splash, which sits near (344, 248) in the demo frame.
-    assert platform.game.events[1][1] == pytest.approx(344, abs=6)
-    assert platform.game.events[1][2] == pytest.approx(248, abs=6)
+    # The click lands where the simulated game put the splash for that cast.
+    assert platform.game.events[1][1:] == pytest.approx(platform.game.landings[0], abs=6)
     assert platform.game.events[2] == ('click', 'right', platform.game.events[1][1], platform.game.events[1][2])
     assert running['running'] and running['state'] == 'fishing'
     assert running['stats']['inference_ms'] > 0
     assert not stopped['running'] and stopped['state'] == 'idle'
     assert stopped['message'] == 'Stopped.'
     assert stopped['stats']['looted'] >= 1  # the last session's numbers stay visible
+
+
+def test_every_click_is_kept_with_the_picture_it_was_based_on(service, platform):
+    assert service.snapshot()['clicks'] == []
+
+    service.start()
+    assert wait_for(lambda: service.snapshot()['stats']['looted'] >= 1)
+    service.stop()
+    service.wait(10)
+
+    newest = service.snapshot()['clicks'][0]
+    assert (newest['x'], newest['y']) == pytest.approx(platform.game.landings[newest['id'] - 1], abs=6)
+    assert newest['practice'] is False and newest['score'] >= 0.8
+    assert 'picture' not in newest
+    assert service.click_jpeg(newest['id'])[:2] == b'\xff\xd8'
+    assert service.click_jpeg(999) is None
+
+
+def test_practice_mode_sends_nothing_and_still_records_what_it_would_click(service, platform):
+    service.store.update({'practice_mode': True})
+    assert service.start() == []
+    assert wait_for(lambda: service.snapshot()['state'] == 'practice')
+
+    platform.game.cast()  # the user casts in the game themselves
+    assert wait_for(lambda: service.snapshot()['stats']['practice_clicks'] >= 1)
+    service.stop()
+    service.wait(10)
+
+    snapshot = service.snapshot()
+    assert platform.game.events == []
+    assert snapshot['clicks'][0]['practice'] is True
+    assert (snapshot['clicks'][0]['x'], snapshot['clicks'][0]['y']) == pytest.approx(platform.game.landings[0], abs=6)
+    assert snapshot['stats']['looted'] == 0 and snapshot['stats']['casts'] == 0
+
+
+def test_a_stop_by_a_safeguard_is_marked_as_one(service, platform):
+    # Nothing ever bites, and the bot gives up after one miss.
+    platform.game.bite_after = (1000, 1000)
+    service.store.update({'stop_after_misses': 1, 'cast_seconds': 5})
+    service.start()
+
+    assert wait_for(lambda: not service.running, timeout=30)
+
+    snapshot = service.snapshot()
+    assert snapshot['stopped_by_safeguard'] is True
+    assert snapshot['message'].startswith('Stopped: 1 cast in a row caught nothing.')
+
+    service.store.update({'stop_after_misses': 0})
+    service.start()
+    assert wait_for(lambda: service.snapshot()['state'] == 'fishing')
+    assert service.snapshot()['stopped_by_safeguard'] is False  # a new session starts clean
+
+
+def test_a_stop_by_the_user_is_not_marked_as_a_safeguard(service):
+    service.start()
+    assert wait_for(lambda: service.snapshot()['state'] == 'fishing')
+    service.stop()
+    service.wait(10)
+
+    assert service.snapshot()['stopped_by_safeguard'] is False
 
 
 def test_pause_and_resume(service, platform):

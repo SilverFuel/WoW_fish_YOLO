@@ -58,6 +58,9 @@ A few things are different on a Mac:
 
 ## While fishing
 
+**The page did not come back after a check or a test cast.** Your computer did not allow it that time. Switch
+back to your browser yourself; the result is waiting there.
+
 **It says it is waiting for the game.** Click on the game so it is the window in front.
 
 **It says it is waiting for the mouse.** Let go of the mouse for a moment. It carries on once the mouse is still.
@@ -78,7 +81,7 @@ full it keeps casting and clicking, but nothing more is kept. Make room before y
 **More options**, and see [Keeping your bags clear](#keeping-your-bags-clear-optional) below.
 
 **It makes my computer slow.** Open **More options** and choose **Watch the middle**. The bobber then has to
-land in the middle of the screen; **Take a look** shows the area as a blue box.
+land in the middle of the screen; **Check my game** shows the area as a blue box.
 
 **It says it is fishing, but nothing happens in the game.** Its key presses are not reaching the game.
 

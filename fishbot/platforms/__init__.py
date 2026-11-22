@@ -9,6 +9,8 @@ Each platform module provides:
     permission_problems() -> what the user still has to allow before the bot can work, as sentences
     create_controls()    -> object with press(key), moveTo(x, y, duration), click(button=...)
     create_grabber()     -> object with grab(region) returning BGR pixels
+    front_window()       -> whatever the person has in front right now, as a value to hand back later
+    bring_to_front(it)   -> bring that back to the front (best effort; the system may refuse)
 
 A window object has exists(), is_foreground(), focus() and capture_region(); the last returns
 {'left', 'top', 'width', 'height'} in screen coordinates, or None when there is nothing to capture.

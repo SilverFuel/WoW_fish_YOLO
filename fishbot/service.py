@@ -9,7 +9,7 @@ import collections
 import threading
 import time
 import traceback
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 from fishbot import __version__, keys
 from fishbot.detector import DEFAULT_MODEL, SplashDetector
@@ -50,6 +50,7 @@ class BotService:
         self._last_elapsed = 0.0
         self._message = ''
         self._practice = False
+        self._test, self._test_result = False, ''
         self._stopped_by_safeguard = False
         self._clicks = collections.deque(maxlen=CLICKS_KEPT)  # what was clicked, newest last
         self._click_id = 0
@@ -69,13 +70,20 @@ class BotService:
         thread = self._thread
         return self._starting or (thread is not None and thread.is_alive())
 
-    def start(self, practice=False):
-        """Start fishing. Returns a list of problems; empty means it started."""
+    def start(self, practice=False, test=False):
+        """Start fishing. Returns a list of problems; empty means it started.
+
+        ``practice`` only watches. ``test`` is one real cast: it casts once, clicks the bobber if it
+        sees a bite, stops, and hands the front back to the window it was started from.
+        """
         with self._lock:
             if self.running:
                 return ['It is already running.']
 
             settings = self.store.settings
+            if test:
+                # One cast, no lure: the point is to see a single cast and click.
+                settings = replace(settings, lure_enabled=False, stop_after_catches=1, stop_after_misses=1)
             # Practice presses nothing, so it needs no keys.
             problems = [] if practice else problems_before_start(settings)
             if problems:
@@ -96,7 +104,10 @@ class BotService:
             self._message = ''
             self._stopped_by_safeguard = False
             self._practice = practice
-            self._thread = threading.Thread(target=self._run, args=(settings, window, practice), name='fishing', daemon=True)
+            self._test, self._test_result = test, ''
+            came_from = self._front_window() if test else None
+            self._thread = threading.Thread(target=self._run, args=(settings, window, practice, came_from),
+                                            name='fishing', daemon=True)
             self._thread.start()
             return []
 
@@ -140,7 +151,7 @@ class BotService:
                 self._controls = self.platform.create_controls()
             return self._controls
 
-    def _run(self, settings, window, practice):
+    def _run(self, settings, window, practice, hand_back_to=None):
         bot = None
         finished = threading.Event()
         try:
@@ -157,7 +168,9 @@ class BotService:
                 if self._pause_while_starting:
                     bot.set_paused(True)
 
-            if self.platform.SYSTEM == 'demo':
+            if self._test:
+                self.log('Test cast: it casts once, clicks the bobber if it sees a bite, then stops.')
+            elif self.platform.SYSTEM == 'demo':
                 self.log('Started. This is the pretend game, so use the buttons on this page to pause and stop.')
             elif not practice:
                 self.log(f'Started. In the game, {settings.pause_hotkey.upper()} pauses and {settings.stop_hotkey.upper()} stops.')
@@ -182,10 +195,37 @@ class BotService:
                 if self._vision is not None and self._vision.last is not None:
                     self._sighting = self._vision.last
                     self._preview_id += 1
+                if self._test:
+                    # A test cast ends after one cast either way; neither ending is an alarm.
+                    if bot.stats.looted:
+                        self._test_result, message = 'caught', 'The test cast is done.'
+                    elif bot.stats.missed:
+                        self._test_result, message = 'no_bite', 'The test cast saw no bite.'
+                        self._stopped_by_safeguard = False
+                    else:
+                        self._test_result = 'stopped'
             self._bot, self._vision = None, None
             self._starting = False
             self._message = message
         self.log(message, level)
+        self._hand_back(hand_back_to)
+
+    def _front_window(self):
+        """What the person has in front right now, normally this page, so it can be handed back."""
+        try:
+            return self.platform.front_window()
+        except Exception:
+            traceback.print_exc()
+            return None
+
+    def _hand_back(self, window):
+        """Bring the person's own window back after the game was brought forward for them."""
+        if window is None:
+            return
+        try:
+            self.platform.bring_to_front(window)
+        except Exception:
+            traceback.print_exc()
 
     def _remember_click(self, vision, x, y, practice):
         """Keep the picture the bot acted on, so a wrong click can be looked at afterwards."""
@@ -239,6 +279,13 @@ class BotService:
         if missing:
             return {'ok': False, 'message': ' '.join(missing)}
 
+        came_from = self._front_window()
+        try:
+            return self._look_once(window)
+        finally:
+            self._hand_back(came_from)
+
+    def _look_once(self, window):
         window.focus()
         deadline = time.monotonic() + FOCUS_WAIT_SEC
         while not window.is_foreground() and time.monotonic() < deadline:
@@ -270,7 +317,7 @@ class BotService:
         elif not in_front:
             message = 'The game did not come to the front, so this may show another window. Click on the game and try again.'
         else:
-            message = ('This is what it sees. If that is your game, you are good to go.' if settings.scan_area == 'full'
+            message = ('This is what it sees.' if settings.scan_area == 'full'
                        else 'This is what it sees. The bobber has to land inside the blue box.')
 
         return {'ok': not blank, 'message': message, 'in_front': in_front, 'blank': blank,
@@ -309,6 +356,8 @@ class BotService:
                 'running': self.running,
                 'message': self._message,
                 'practice': self._practice,  # the current or last session only watched
+                'test': self._test,  # the current or last session was a single test cast
+                'test_result': self._test_result,  # '', 'caught', 'no_bite' or 'stopped'
                 'waiting_for': bot.waiting_for if bot is not None else '',
                 # The last session ended because a safeguard stopped it, not because the user did.
                 'stopped_by_safeguard': self._stopped_by_safeguard and bot is None,

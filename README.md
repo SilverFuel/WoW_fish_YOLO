@@ -24,15 +24,18 @@ If your computer will not open the starter, see [Help](docs/help.md).
 
 ## On the page
 
-1. **Get the game ready.** Zoom all the way in, face the water, hide the buttons and bars (`Alt`+`Z`),
-   switch on Auto Loot in the game's settings, and make room in your bags.
-2. **Pick your fishing key.** That is the key you press in the game to cast.
-3. **Using a lure?** Switch it on and pick its key. Skip this if you are not.
+The page walks you through three steps. Each one is a single button:
+
+1. **Pick your fishing key.** Press the key you cast with in the game.
+2. **Check your game.** Get the game ready the way the page shows, then press **Check my game**. It shows you
+   what it sees, and you say whether that looks right.
+3. **Try one cast.** Press **Do one test cast**. It casts once, clicks the bobber, and shows you what it clicked.
 
 Then press **Start fishing**.
 
-First time? Press **Practice first**. It only watches and never presses or clicks, so you can see what it
-takes for a bite before you let it click.
+You do not have to switch windows yourself: after a check or a test cast, the page comes back to the front on
+its own. Using a lure? Switch it on under **More options**. Would you rather it only watched at first?
+**Practice first** never presses or clicks.
 
 ## The controls
 

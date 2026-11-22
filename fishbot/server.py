@@ -142,7 +142,7 @@ class AppServer:
                 errors = {name: f'is in use now, but the settings file could not be saved ({reason})' for name in body}
             return {'settings': settings.to_dict(), 'errors': errors}
         if path == '/api/start':
-            return {'problems': service.start(practice=body.get('practice') is True)}
+            return {'problems': service.start(practice=body.get('practice') is True, test=body.get('test') is True)}
         if path == '/api/stop':
             service.stop('Stopped.')
             return {}

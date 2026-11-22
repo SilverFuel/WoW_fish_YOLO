@@ -8,7 +8,7 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 SUGGESTION = {'reply': 'Watching only the middle of the game and looking 4 times a second saves the most. '
-                       'Press Take a look afterwards to check the bobber still lands inside the blue box.',
+                       'Press Check my game afterwards to check the bobber still lands inside the blue box.',
               'changes': {'scan_area': 'center50', 'checks_per_second': 4, 'cpu_threads': 99}}
 PLAIN = {'reply': 'Check three things first: zoomed all the way in, the buttons and bars hidden with Alt+Z, '
                   'and Auto Loot switched on.', 'changes': {}}

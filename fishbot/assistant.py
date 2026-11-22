@@ -56,7 +56,9 @@ How the bot works:
   When it sees the bobber splash it right-clicks the bobber. Auto Loot must be on in the game.
 - It only sends keys and clicks while the game is the window in front.
 - The model was trained in first-person view with the game interface hidden (Alt+Z).
-- "Take a look" on the page shows what the bot sees. "What it clicked" shows what it clicked.
+- The page has three set-up steps: pick the fishing key, "Check my game" (shows what the bot sees) and
+  "Do one test cast" (one real cast, then it shows what it clicked). "What it clicked" keeps the pictures of
+  its clicks. The lure is under "More options".
 - It stops by itself when things stop looking like fishing: several misses in a row, splashes that come too
   soon or always on the same spot, constant recasting, or a black screen. It pauses when the user moves the mouse.
 

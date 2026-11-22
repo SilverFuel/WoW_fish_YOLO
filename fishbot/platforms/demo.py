@@ -132,6 +132,14 @@ def find_game_window():
     return DemoWindow()
 
 
+def front_window():
+    return None  # the pretend game never takes the front, so there is nothing to hand back
+
+
+def bring_to_front(window):
+    pass
+
+
 def key_is_down(name):
     return False
 

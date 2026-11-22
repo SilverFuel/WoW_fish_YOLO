@@ -20,6 +20,13 @@ class DemoPlatform:
         self.keys_down = set()
         self.window_missing = False
         self.missing_permissions = []
+        self.brought_back = []
+
+    def front_window(self):
+        return 'the page'
+
+    def bring_to_front(self, window):
+        self.brought_back.append(window)
 
     def find_game_window(self):
         if self.window_missing:
@@ -143,6 +150,55 @@ def test_every_click_is_kept_with_the_picture_it_was_based_on(service, platform)
     assert 'picture' not in newest
     assert service.click_jpeg(newest['id'])[:2] == b'\xff\xd8'
     assert service.click_jpeg(999) is None
+
+
+def test_a_test_cast_is_one_cast_and_hands_the_page_back(service, platform):
+    service.store.update({'lure_enabled': True, 'lure_key': '2'})
+
+    assert service.start(test=True) == []
+    assert wait_for(lambda: not service.running, timeout=30)
+    service.wait(10)
+
+    snapshot = service.snapshot()
+    assert (snapshot['test'], snapshot['test_result']) == (True, 'caught')
+    assert (snapshot['stats']['casts'], snapshot['stats']['looted']) == (1, 1)
+    assert snapshot['message'] == 'The test cast is done.'
+    assert snapshot['stopped_by_safeguard'] is False
+    assert [event[1] for event in platform.game.events if event[0] == 'press'] == ['f']  # one cast, and no lure
+    assert platform.brought_back == ['the page']
+    assert service.store.settings.stop_after_catches == 0  # the saved settings are untouched
+
+
+def test_a_test_cast_with_no_bite_says_so_without_an_alarm(service, platform):
+    platform.game.bite_after = (1000, 1000)
+    service.store.update({'cast_seconds': 5})
+
+    service.start(test=True)
+    assert wait_for(lambda: not service.running, timeout=30)
+    service.wait(10)
+
+    snapshot = service.snapshot()
+    assert snapshot['test_result'] == 'no_bite'
+    assert snapshot['message'] == 'The test cast saw no bite.'
+    assert snapshot['stopped_by_safeguard'] is False
+    assert platform.brought_back == ['the page']
+
+
+def test_a_normal_session_does_not_take_the_front_from_you(service, platform):
+    service.start()
+    assert wait_for(lambda: service.snapshot()['state'] == 'fishing')
+    service.stop()
+    service.wait(10)
+
+    assert platform.brought_back == []
+    assert (service.snapshot()['test'], service.snapshot()['test_result']) == (False, '')
+
+
+def test_checking_the_game_hands_the_page_back(service, platform):
+    result = service.check_setup()
+
+    assert result['ok'] is True
+    assert platform.brought_back == ['the page']
 
 
 def test_practice_needs_no_keys_because_it_presses_none(platform, tmp_path):

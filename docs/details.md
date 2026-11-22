@@ -57,7 +57,7 @@ Checked for every change, on machines provided by GitHub. If any of these fails,
 - **The parts that touch your system**, on the same three. `tools/desktop_probe.py` runs the bot's own code
   against a test window: finding the window, bringing it to the front, taking its picture, seeing the splash,
   pressing a key and right-clicking, and a whole cast with the real fishing loop. It also checks that moving
-  the mouse pauses it. It gets one more try if it fails, because a shared machine's desktop is sometimes slow.
+  the mouse pauses it, and that the front is handed back to the window you were in. It gets one more try if it fails, because a shared machine's desktop is sometimes slow.
 - **The page**, on Linux. `tools/check_page.py` opens it in a real browser against the pretend game and uses it
   the way a person would: about 60 checks.
 - **The test suite**, about 260 tests, on Windows, Mac and Linux, with Python 3.11 and 3.13.
@@ -68,7 +68,7 @@ Checked once, by hand: the ONNX model gives the same answers as the original PyT
 Not tested:
 
 - **The game itself.** It cannot run on a build machine, so every check uses a test window or the pretend game.
-  Do a short run while you watch, and use **Practice first** and **Take a look**.
+  Do the three set-up steps on the page first, then a short run while you watch.
 - **Double-clicking a downloaded copy.** The checks run the starter from a command line. The warnings Windows
   and macOS show for downloaded files, and the browser opening by itself, are not covered.
 - **Python 3.12 and 3.14.** The parts this needs are published for them, but the tests run on 3.11 and 3.13.

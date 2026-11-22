@@ -12,6 +12,7 @@ const STATUS = {
   waiting: ['Waiting for the game', 'Click on the game so it is the window in front. Nothing is pressed until it is.'],
   waitingForMouse: ['Waiting for the mouse', 'Let go of the mouse for a moment. It carries on once the mouse is still.'],
   fishing: ['Fishing', 'Watching for a bite.'],
+  test: ['Test cast', 'One cast, then it stops and this page comes back.'],
   practice: ['Practice', 'Watching only. Cast in the game yourself. Nothing is pressed or clicked.'],
   paused: ['Paused', 'Press Resume when you are ready.'],
   stopped: ['Stopping…', ''],
@@ -34,6 +35,12 @@ let closed = false;
 let clicksShown = '';
 let hintShown = false;
 let hintMouse = true;
+// The three set-up steps. Which ones are finished is remembered by this browser.
+const GUIDE_STORE = 'wow-fish-yolo.setup';
+const guide = { look: false, cast: false };
+let reopened = null;      // a finished step the person asked to do again: 'look' or 'cast'
+let castProblem = '';     // why the last test cast could not start
+let castPictureId = null; // the click whose picture is shown as the test cast's result
 const clickPictures = new Map(); // click id -> object URL of its picture
 const chat = [];
 
@@ -147,13 +154,15 @@ function showSettings(settings) {
 function showStatus() {
   const running = state.running;
   const waitingForMouse = state.state === 'waiting' && state.waiting_for === 'mouse';
-  const [title, hint] = (waitingForMouse ? STATUS.waitingForMouse : STATUS[state.state]) || STATUS.idle;
+  const testing = state.test && state.state === 'fishing';
+  const [title, hint] = (waitingForMouse ? STATUS.waitingForMouse : testing ? STATUS.test : STATUS[state.state]) || STATUS.idle;
   const stoppedItself = !running && state.stopped_by_safeguard;
   let detail = hint;
   if (state.state === 'idle') {
     // A plain "Stopped." after you pressed Stop says nothing new; what to do next is more useful.
     if (state.message && state.message !== 'Stopped.') detail = state.message;
     else if (!state.settings.fishing_key) detail = 'Three quick steps below, then press Start fishing.';
+    else if (!guide.look || !guide.cast) detail = 'Finish the steps below, then press Start fishing.';
   }
 
   // When it stops itself the page says so in the title, rather than a calm "Ready".
@@ -180,11 +189,10 @@ function showStatus() {
 
   // Settings apply when a session starts, so they are locked while one runs.
   $('setup').disabled = running;
-  $('setup-locked').hidden = !running;
+  $('setup-locked').hidden = !running || state.test; // during a test cast the step itself says what is happening
   $('more-settings').disabled = running;
   $('more-locked').hidden = !running;
-  $('check').disabled = running;
-  if (running) $('check-message').hidden = true; // what Take a look said is about an older picture
+  $('live-block').hidden = !running;
 
   const stats = state.stats;
   $('stat-looted-label').textContent = state.practice ? 'Would have clicked' : 'Caught';
@@ -220,9 +228,6 @@ async function loadPicture() {
     if (!response.ok) return;
     const url = URL.createObjectURL(await response.blob());
     $('preview').src = url;
-    $('preview-frame').hidden = false;
-    $('preview-empty').hidden = true;
-    $('preview-key').hidden = false;
     if (pictureUrl) URL.revokeObjectURL(pictureUrl);
     pictureUrl = url;
   } catch (error) {
@@ -293,17 +298,95 @@ function show(next) {
 
   showSettings(next.settings);
   showStatus();
+  showGuide();
   addToLog(next.log);
   cursor = Math.max(cursor, next.log_cursor);
   showClicks(next.clicks);
 
-  if (next.preview && next.preview !== pictureTag) {
-    const live = next.preview.startsWith('live-');
-    if (!live || Date.now() - pictureAt >= LIVE_PICTURE_MS) {
-      pictureTag = next.preview;
-      loadPicture();
+  // The picture under "What it sees" follows a running session.
+  if (next.running && next.preview.startsWith('live-') && next.preview !== pictureTag
+      && Date.now() - pictureAt >= LIVE_PICTURE_MS) {
+    pictureTag = next.preview;
+    loadPicture();
+  }
+}
+
+// ----- the three set-up steps -----
+
+function loadGuide() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(GUIDE_STORE)) || {};
+    guide.look = saved.look === true;
+    guide.cast = saved.cast === true;
+  } catch (error) {
+    // without storage the steps simply show again next time
+  }
+}
+
+function saveGuide() {
+  try {
+    localStorage.setItem(GUIDE_STORE, JSON.stringify(guide));
+  } catch (error) {
+    // see loadGuide
+  }
+}
+
+function showGuide() {
+  const done = { key: Boolean(state.settings.fishing_key), look: guide.look, cast: guide.cast };
+  const steps = ['key', 'look', 'cast'];
+  const next = steps.find((name) => !done[name]) || null;
+
+  for (const name of steps) {
+    const open = name === next || name === reopened;
+    const item = $(`step-${name}`);
+    item.classList.toggle('done', done[name] && !open);
+    item.classList.toggle('later', !done[name] && !open);
+    const body = $(`${name}-body`);
+    if (body) body.hidden = !open;
+    const again = item.querySelector('[data-reopen]');
+    if (again) again.hidden = !done[name] || open;
+  }
+  $('guide-done').hidden = next !== null || reopened !== null;
+  showTestCast();
+}
+
+function showTestCast() {
+  const testing = state.running && state.test;
+  $('test-cast').textContent = testing ? 'Casting…' : 'Do one test cast';
+
+  let text = castProblem;
+  let clicked = null;
+  if (testing) {
+    text = 'Watch the game. It casts once and clicks the bobber when it sees a bite. This page comes back by itself.';
+  } else if (!state.running && state.test && !castProblem) {
+    if (state.test_result === 'caught') {
+      clicked = state.clicks.find((click) => !click.practice) || null;
+    } else if (state.test_result === 'no_bite') {
+      text = 'It did not see a bite on that cast. Check that your fishing key is right and that the game looks like the picture in step 2, then try again.';
+    } else if (state.test_result === 'stopped') {
+      text = state.message === 'Stopped.' ? 'The test cast was stopped before it finished.' : state.message;
     }
   }
+
+  const message = $('cast-message');
+  message.textContent = text;
+  message.hidden = text === '';
+  message.classList.toggle('bad', Boolean(castProblem));
+  $('cast-result').hidden = clicked === null;
+  if (clicked !== null && clicked.id !== castPictureId) {
+    castPictureId = clicked.id;
+    $('cast-help').hidden = true;
+    clickPicture(clicked.id).then((url) => {
+      if (url && castPictureId === clicked.id) $('cast-picture').src = url;
+    });
+  }
+}
+
+function finishStep(name) {
+  guide[name] = true;
+  if (reopened === name) reopened = null;
+  saveGuide();
+  showGuide();
 }
 
 async function refresh() {
@@ -427,11 +510,24 @@ async function start(practice) {
   startProblems = result.problems;
   await refresh();
   // Take the person to what is missing, rather than leaving them to look for it.
-  if (!practice && !state.settings.fishing_key && startProblems.length) {
-    const key = document.querySelector('[data-key-setting="fishing_key"]');
+  if (practice || !startProblems.length) return;
+  let missing = null;
+  if (!state.settings.fishing_key) missing = 'fishing_key';
+  else if (state.settings.lure_enabled && !state.settings.lure_key) missing = 'lure_key';
+  if (missing) {
+    if (missing === 'lure_key') $('more').open = true;
+    const key = document.querySelector(`[data-key-setting="${missing}"]`);
     key.scrollIntoView({ behavior: 'smooth', block: 'center' });
     key.focus();
   }
+}
+
+async function testCast() {
+  castProblem = '';
+  startProblems = [];
+  const result = await api('/api/start', { test: true }).catch((error) => ({ problems: [error.message] }));
+  castProblem = result.problems.join(' ');
+  await refresh();
 }
 
 async function act(path, body) {
@@ -459,23 +555,51 @@ $('quit').addEventListener('click', async () => {
 $('check').addEventListener('click', async () => {
   const button = $('check');
   const message = $('check-message');
-  const say = (text, bad) => {
+  const say = (text) => {
     message.textContent = text;
-    message.classList.toggle('bad', bad);
-    message.hidden = false;
+    message.classList.add('bad');
+    message.hidden = text === '';
   };
 
   button.disabled = true;
-  button.textContent = 'Looking…';
-  say('The game is coming to the front. Switch back here to see the picture.', false);
+  button.textContent = 'Checking…';
+  say('');
+  $('look-result').hidden = true;
+  $('look-help').hidden = true;
   try {
     const result = await api('/api/check', {});
-    say(result.message, !result.ok);
+    if (result.ok && result.in_front) {
+      const response = await fetch('/api/preview.jpg', { headers: { 'X-Fishbot-Token': token } });
+      if (!response.ok) throw new Error('The picture could not be loaded. Try again.');
+      const picture = $('look-picture');
+      if (picture.src) URL.revokeObjectURL(picture.src);
+      picture.src = URL.createObjectURL(await response.blob());
+      $('look-caption').textContent = result.message;
+      $('look-result').hidden = false;
+    } else {
+      say(result.message);
+    }
   } catch (error) {
-    say(error.message, true);
+    say(error.message);
   }
-  button.textContent = 'Take a look';
+  button.disabled = false;
+  button.textContent = 'Check my game';
   await refresh();
+});
+
+$('look-yes').addEventListener('click', () => {
+  $('look-result').hidden = true;
+  finishStep('look');
+});
+$('look-no').addEventListener('click', () => { $('look-help').hidden = false; });
+$('test-cast').addEventListener('click', testCast);
+$('cast-yes').addEventListener('click', () => finishStep('cast'));
+$('cast-no').addEventListener('click', () => { $('cast-help').hidden = false; });
+document.addEventListener('click', (event) => {
+  const again = event.target.closest('[data-reopen]');
+  if (!again || !state) return;
+  reopened = again.dataset.reopen;
+  showGuide();
 });
 
 // ----- the assistant -----
@@ -610,6 +734,7 @@ $('assistant-test').addEventListener('click', async () => {
 
 // ----- go -----
 
+loadGuide();
 refresh();
 setInterval(() => { if (!document.hidden) refresh(); }, 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });

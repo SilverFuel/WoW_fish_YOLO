@@ -105,30 +105,7 @@ class GameWindow:
 
         Windows is allowed to refuse; callers check ``is_foreground`` rather than assume it worked.
         """
-        try:
-            if win32gui.IsIconic(self.hwnd):
-                win32gui.ShowWindow(self.hwnd, win32con.SW_RESTORE)
-            win32gui.SetForegroundWindow(self.hwnd)
-        except pywintypes.error:
-            pass
-        if win32gui.GetForegroundWindow() != self.hwnd:
-            self._focus_from_the_background()
-
-    def _focus_from_the_background(self):
-        """Second attempt, for when the bot is not the program the user last touched.
-
-        Start is pressed in the browser, so the browser holds the right to change the front
-        window and Windows refuses the plain request. Holding ALT counts as fresh input from this
-        program, which lifts the refusal. ALT is released again whatever happens.
-        """
-        try:
-            win32api.keybd_event(win32con.VK_MENU, 0, 0, 0)
-            try:
-                win32gui.SetForegroundWindow(self.hwnd)
-            finally:
-                win32api.keybd_event(win32con.VK_MENU, 0, win32con.KEYEVENTF_KEYUP, 0)
-        except pywintypes.error:
-            pass
+        _to_front(self.hwnd)
 
     def capture_region(self):
         """The game's drawing area (no title bar or borders), or None if there is nothing to capture."""
@@ -143,6 +120,55 @@ class GameWindow:
         if width <= 0 or height <= 0:
             return None
         return {'left': left, 'top': top, 'width': width, 'height': height}
+
+
+def _to_front(hwnd):
+    try:
+        if win32gui.IsIconic(hwnd):
+            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+        win32gui.SetForegroundWindow(hwnd)
+    except pywintypes.error:
+        pass
+    try:
+        refused = win32gui.GetForegroundWindow() != hwnd
+    except pywintypes.error:
+        return
+    if refused:
+        _to_front_from_the_background(hwnd)
+
+
+def _to_front_from_the_background(hwnd):
+    """Second attempt, for when the bot is not the program the user last touched.
+
+    Start is pressed in the browser, so the browser holds the right to change the front
+    window and Windows refuses the plain request. Holding ALT counts as fresh input from this
+    program, which lifts the refusal. ALT is released again whatever happens.
+    """
+    try:
+        win32api.keybd_event(win32con.VK_MENU, 0, 0, 0)
+        try:
+            win32gui.SetForegroundWindow(hwnd)
+        finally:
+            win32api.keybd_event(win32con.VK_MENU, 0, win32con.KEYEVENTF_KEYUP, 0)
+    except pywintypes.error:
+        pass
+
+
+def front_window():
+    """The window the person is using right now, so it can be handed back after the game was brought forward."""
+    try:
+        return win32gui.GetForegroundWindow() or None
+    except pywintypes.error:
+        return None
+
+
+def bring_to_front(hwnd):
+    """Bring back a window noted by ``front_window``. Windows may refuse, and nothing depends on it."""
+    try:
+        if hwnd and win32gui.IsWindow(hwnd):
+            _to_front(hwnd)
+    except pywintypes.error:
+        pass
 
 
 def key_is_down(name):

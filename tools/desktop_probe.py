@@ -293,10 +293,11 @@ def main():
             notes = from_a_thread(press_and_look)
             return True, ' || '.join(notes) if isinstance(notes, list) else str(notes)
 
-    @check('come to the front from behind another program')
+    @check('come to the front from behind another program, then hand the front back')
     def _():
-        # The usual case: Start is pressed in the browser, so another program is in front
-        # and the bot has to bring the game forward from the background.
+        # The usual case: a button is pressed in the browser, so another program is in front
+        # and the bot has to bring the game forward from the background. After "Check my game"
+        # or a test cast it then gives the front back to where the person was.
         import subprocess
         if platform.SYSTEM == 'windows':
             other = subprocess.Popen(['notepad.exe'])
@@ -313,10 +314,19 @@ def main():
                 pump(0.2)
             behind = not window.is_foreground()
             before = in_front_report()
+            came_from = platform.front_window()
             window.focus()
             pump(1.5)
-            return window.is_foreground(), (f'another program took the front: {behind} ({before}); '
-                                            f'after focus(): {in_front_report()}')
+            came_forward = window.is_foreground()
+            after_focus = in_front_report()
+
+            platform.bring_to_front(came_from)
+            pump(1.5)
+            handed_back = came_from is not None and not window.is_foreground() and platform.front_window() == came_from
+            return came_forward and handed_back, (
+                f'another program took the front: {behind} ({before}); after focus(): {after_focus}; '
+                f'noted {came_from!r} as in front beforehand; after handing back: front is {platform.front_window()!r}, '
+                f'test window in front: {window.is_foreground()}')
         finally:
             close()
             pump(1.0)

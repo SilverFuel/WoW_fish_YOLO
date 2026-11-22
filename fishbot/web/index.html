@@ -52,7 +52,7 @@
     </div>
     <p id="start-problem" class="problem" hidden></p>
     <p id="practice-line" class="quiet">
-      First time? <button id="practice" class="link" type="button">Practice first</button>.
+      Not sure yet? <button id="practice" class="link" type="button">Practice first</button>.
       It only watches and never presses or clicks.
     </p>
 
@@ -67,68 +67,87 @@
     <p id="hint-demo" class="quiet" hidden>In this demo, use the buttons above to pause and stop.</p>
   </section>
 
-  <!-- Three steps, once. -->
+  <!-- Three steps, one at a time. The page checks things and switches windows for you. -->
   <section class="card" aria-labelledby="setup-title">
     <h2 id="setup-title">Set up</h2>
     <p id="setup-locked" class="note" hidden>Stop first to change these.</p>
     <fieldset id="setup">
       <legend class="visually-hidden">Set up</legend>
-      <ol class="steps">
-        <li>
-          <h3>Get the game ready</h3>
-          <div class="ready">
-            <img src="/ready.jpg" width="640" height="360" alt="The game zoomed all the way in, looking at open water, with no buttons or bars on screen">
-            <ul>
-              <li>Zoom all the way in and face the water.</li>
-              <li>Hide the buttons and bars: press <kbd>Alt</kbd>+<kbd>Z</kbd>.</li>
-              <li>Switch on <b>Auto Loot</b> in the game's settings.</li>
-              <li>Make room in your bags. It cannot see when they are full.</li>
-            </ul>
-          </div>
-          <ul id="platform-notes" class="small-print"></ul>
-        </li>
-        <li>
-          <h3>Pick your fishing key</h3>
+      <ol class="steps" id="guide">
+
+        <li id="step-key">
+          <div class="step-head"><h3>Pick your fishing key</h3></div>
           <div class="row">
             <p>The key you press in the game to cast.</p>
             <button class="keycap" type="button" data-key-setting="fishing_key" aria-label="Fishing key">Choose a key</button>
           </div>
           <p class="field-error" data-error-for="fishing_key"></p>
         </li>
-        <li>
-          <h3>Using a lure? <span class="optional">optional</span></h3>
-          <div class="row">
-            <label for="lure_enabled">Put a lure on when it starts, and a new one each time it runs out.</label>
-            <input class="switch" type="checkbox" id="lure_enabled" data-setting="lure_enabled">
+
+        <li id="step-look">
+          <div class="step-head">
+            <h3>Check your game</h3>
+            <button class="link" type="button" data-reopen="look" hidden>Check again</button>
           </div>
-          <div id="lure-options" hidden>
-            <div class="row">
-              <p>The key your lure is on.</p>
-              <button class="keycap" type="button" data-key-setting="lure_key" aria-label="Lure key">Choose a key</button>
+          <div class="step-body" id="look-body">
+            <div class="ready">
+              <img src="/ready.jpg" width="640" height="360" alt="The game zoomed all the way in, looking at open water, with no buttons or bars on screen">
+              <ul>
+                <li>Zoom all the way in and face the water.</li>
+                <li>Hide the buttons and bars: press <kbd>Alt</kbd>+<kbd>Z</kbd>.</li>
+                <li>Switch on <b>Auto Loot</b> in the game's settings.</li>
+                <li>Make room in your bags. It cannot see when they are full.</li>
+              </ul>
             </div>
-            <p class="field-error" data-error-for="lure_key"></p>
-            <div class="row">
-              <label for="lure_minutes">A lure lasts</label>
-              <span class="with-unit"><input type="number" id="lure_minutes" data-setting="lure_minutes" min="1" max="240" inputmode="numeric"> minutes</span>
+            <ul id="platform-notes" class="small-print"></ul>
+            <p class="step-action">
+              <button id="check" class="button primary" type="button">Check my game</button>
+              <span class="quiet">The game comes to the front for a moment, then this page comes back.</span>
+            </p>
+            <p id="check-message" class="note" hidden></p>
+            <div id="look-result" hidden>
+              <img id="look-picture" class="result-picture" alt="What it sees of your game right now">
+              <p><b id="look-caption">This is what it sees.</b> Does it look like the picture above: your game, with water and no buttons or bars?</p>
+              <p class="answers">
+                <button id="look-yes" class="button primary" type="button">Yes, it does</button>
+                <button id="look-no" class="button" type="button">Not yet</button>
+              </p>
+              <p id="look-help" class="quiet" hidden>Fix it in the game, then press <b>Check my game</b> again. If <kbd>Alt</kbd>+<kbd>Z</kbd> opens something else on your computer, give <b>Toggle User Interface</b> another key in the game's Keybindings.</p>
             </div>
-            <p class="field-error" data-error-for="lure_minutes"></p>
+          </div>
+        </li>
+
+        <li id="step-cast">
+          <div class="step-head">
+            <h3>Try one cast</h3>
+            <button class="link" type="button" data-reopen="cast" hidden>Try again</button>
+          </div>
+          <div class="step-body" id="cast-body">
+            <p>It casts once in the game and clicks the bobber when it sees a bite. Then this page comes back and shows you what it clicked. Keep your hand off the mouse while it does.</p>
+            <p class="step-action"><button id="test-cast" class="button primary" type="button">Do one test cast</button></p>
+            <p id="cast-message" class="note" hidden></p>
+            <div id="cast-result" hidden>
+              <img id="cast-picture" class="result-picture" alt="The picture it was looking at, with a box around what it clicked">
+              <p><b>It clicked inside the green box.</b> Is that your bobber?</p>
+              <p class="answers">
+                <button id="cast-yes" class="button primary" type="button">Yes, it worked</button>
+                <button id="cast-no" class="button" type="button">No</button>
+              </p>
+              <p id="cast-help" class="quiet" hidden>Then it took something else for a bite. Check that the game looks like the picture in step 2, and try again.</p>
+            </div>
           </div>
         </li>
       </ol>
+      <p id="guide-done" class="note" hidden>You are all set. Press <b>Start fishing</b> whenever you like.</p>
     </fieldset>
   </section>
 
-  <section class="card" aria-labelledby="preview-title">
-    <div class="card-head">
-      <h2 id="preview-title">What it sees</h2>
-      <button id="check" class="button small" type="button">Take a look</button>
-    </div>
-    <p id="preview-empty" class="quiet">Not sure it is looking at the right thing? Open the game, then press <b>Take a look</b>. The game comes to the front; switch back here to see the picture.</p>
-    <div id="preview-frame" class="preview-frame" hidden>
+  <section class="card" id="live-block" aria-labelledby="preview-title" hidden>
+    <h2 id="preview-title">What it sees</h2>
+    <div class="preview-frame">
       <img id="preview" alt="The latest picture it took of the game">
     </div>
-    <p id="check-message" class="note" hidden></p>
-    <p id="preview-key" class="quiet" hidden>A green box is a bite it would click. An orange box is something it noticed but would not click.</p>
+    <p class="quiet">A green box is a bite it would click. An orange box is something it noticed but would not click.</p>
   </section>
 
   <details class="card" id="clicks-block" hidden>
@@ -144,13 +163,31 @@
     <fieldset id="more-settings">
       <legend class="visually-hidden">More options</legend>
 
+      <h3>Using a lure?</h3>
+      <div class="row">
+        <label for="lure_enabled">Put a lure on when it starts, and a new one each time it runs out.</label>
+        <input class="switch" type="checkbox" id="lure_enabled" data-setting="lure_enabled">
+      </div>
+      <div id="lure-options" hidden>
+        <div class="row">
+          <p>The key your lure is on.</p>
+          <button class="keycap" type="button" data-key-setting="lure_key" aria-label="Lure key">Choose a key</button>
+        </div>
+        <p class="field-error" data-error-for="lure_key"></p>
+        <div class="row">
+          <label for="lure_minutes">A lure lasts</label>
+          <span class="with-unit"><input type="number" id="lure_minutes" data-setting="lure_minutes" min="1" max="240" inputmode="numeric"> minutes</span>
+        </div>
+        <p class="field-error" data-error-for="lure_minutes"></p>
+      </div>
+
       <h3>Go easier on my computer</h3>
       <div class="choices" role="radiogroup" aria-label="How much of the game it watches">
         <label><input type="radio" name="scan_area" value="full" data-setting="scan_area"><span><b>Watch the whole game</b><small>Works everywhere</small></span></label>
         <label><input type="radio" name="scan_area" value="center75" data-setting="scan_area"><span><b>Watch the middle</b><small>Lighter</small></span></label>
         <label><input type="radio" name="scan_area" value="center50" data-setting="scan_area"><span><b>Watch a small middle</b><small>Lightest</small></span></label>
       </div>
-      <p class="quiet">With the lighter choices the bobber has to land in the middle. <b>Take a look</b> shows the area as a blue box.</p>
+      <p class="quiet">With the lighter choices the bobber has to land in the middle. <b>Check my game</b> shows the area as a blue box.</p>
       <p class="field-error" data-error-for="scan_area"></p>
 
       <h3>Stop on its own</h3>

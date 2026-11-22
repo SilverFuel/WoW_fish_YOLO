@@ -44,7 +44,7 @@ The page says why and shows what to do:
   it clicks the bobber. Make room first and set a limit
   on catches or time. The game can throw away junk for you with a macro: see [Help](help.md#keeping-your-bags-clear-optional).
 - If you leave the chat box open in the game, its key presses are typed into it.
-- On Windows, bringing the game to the front when you press Start or Take a look may tap `Alt`. Practice does
-  not do even that.
+- On Windows, bringing the game to the front, and bringing the page back after a check or a test cast, may
+  tap `Alt`. Practice does not do even that.
 - All of this is tested against a pretend game and a test window, not the game itself. Do a short run while
   you watch before you trust it.

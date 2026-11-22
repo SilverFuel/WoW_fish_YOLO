@@ -161,6 +161,23 @@ class GameWindow:
         return region if region['width'] > 0 and region['height'] > 0 else None
 
 
+def front_window():
+    """The program the person is using right now (its process id), so it can be handed back later."""
+    return focused_pid() or frontmost_pid(_window_list(onscreen_only=True))
+
+
+def bring_to_front(pid):
+    """Bring back a program noted by ``front_window``. Best effort; nothing depends on it."""
+    from AppKit import NSApplicationActivateIgnoringOtherApps, NSRunningApplication
+
+    if not pid:
+        return
+    with _pool():
+        application = NSRunningApplication.runningApplicationWithProcessIdentifier_(pid)
+        if application is not None and not application.isTerminated():
+            application.activateWithOptions_(NSApplicationActivateIgnoringOtherApps)
+
+
 def key_is_down(name):
     import Quartz
     return bool(Quartz.CGEventSourceKeyState(Quartz.kCGEventSourceStateHIDSystemState, keys.MAC_KEYCODES[name]))

@@ -189,6 +189,22 @@ kbd {
   display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-strong); font-weight: 700;
 }
 .steps h3 { margin-bottom: 6px; }
+.step-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+/* A finished step shrinks to its heading with a tick; a step that is not its turn yet waits, dimmed. */
+.steps > li.done::before { content: "\2713"; background: var(--good); color: #fff; }
+.steps > li.done h3 { margin-bottom: 0; }
+.steps > li.later { opacity: 0.5; }
+.steps > li.later h3 { margin-bottom: 0; }
+.step-body > p { margin-top: 10px; }
+.step-action { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 14px; }
+.step-action .button, .answers .button { padding: 11px 20px; font-size: 16px; border-radius: 10px; }
+.answers { display: flex; flex-wrap: wrap; gap: 10px; }
+#look-result p, #cast-result p { margin-top: 10px; }
+.result-picture {
+  display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: contain; margin: 14px 0 10px;
+  border-radius: 10px; background: #0b1116;
+}
+#guide-done { margin: 16px 0 0; }
 fieldset:disabled { opacity: 0.6; }
 
 .ready { display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 1fr); gap: 14px; align-items: center; }
@@ -259,7 +275,7 @@ select { min-width: 84px; }
 
 .preview-frame { aspect-ratio: 16 / 9; overflow: hidden; border-radius: 10px; background: #0b1116; }
 .preview-frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
-#preview-key { margin-top: 8px; }
+.preview-frame + .quiet { margin-top: 8px; }
 
 .clicks { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; margin-top: 10px; }
 .click {

@@ -30,7 +30,8 @@ const errorFor = (page, name) => waitFor(page, (n) => document.querySelector(`[d
   check((await text(page, '#status-detail')) === 'Three quick steps below, then press Start fishing.', 'a newcomer is pointed at the three steps', await text(page, '#status-detail'));
   check(await page.locator('#demo-banner').isVisible(), 'the demo says it is a pretend game');
   const visibleControls = await page.evaluate(() => [...document.querySelectorAll('main [data-setting], main [data-key-setting]')].filter((e) => e.offsetParent !== null && e.checkVisibility()).map((e) => e.dataset.setting || e.dataset.keySetting));
-  check(JSON.stringify(visibleControls) === JSON.stringify(['fishing_key', 'lure_enabled']), 'only two settings are in view: the fishing key and the lure switch', visibleControls.join(', '));
+  check(JSON.stringify(visibleControls) === JSON.stringify(['fishing_key']), 'only one choice is in view: the fishing key', visibleControls.join(', '));
+  check(await page.evaluate(() => document.querySelector('#step-look').classList.contains('later') && document.querySelector('#look-body').hidden && document.querySelector('#cast-body').hidden), 'the later steps wait their turn');
   check(!(await page.locator('#more').evaluate((d) => d.open)) && !(await page.locator('#activity').evaluate((d) => d.open)) && await page.locator('#clicks-block').isHidden(), 'everything else starts folded away');
   const words = await page.evaluate(() => document.body.innerText + ' ' + [...document.querySelectorAll('details')].map((d) => d.textContent).join(' '));
   const jargon = ['CPU', 'thread', 'onfidence', 'scan', 'afeguard', 'inference', 'detector', 'threshold', 'splash', 'fail-safe', 'hotkey'].filter((w) => words.includes(w));
@@ -64,9 +65,11 @@ const errorFor = (page, name) => waitFor(page, (n) => document.querySelector(`[d
   await page.click('[data-key-setting="fishing_key"]');
   await page.keyboard.press('Digit1');
   check(await waitText(page, '[data-key-setting="fishing_key"]', '1', 5000), 'pressing 1 picks 1');
-  check(await page.locator('#start-problem').isHidden() && (await text(page, '#status-detail')) === 'Open the game, then press Start fishing.', 'the page now says to press Start');
+  check(await page.locator('#start-problem').isHidden() && (await text(page, '#status-detail')) === 'Finish the steps below, then press Start fishing.', 'the page points at the remaining steps');
+  check(await page.evaluate(() => document.querySelector('#step-key').classList.contains('done') && !document.querySelector('#look-body').hidden && document.querySelector('#cast-body').hidden), 'the key step is ticked and the next step opens');
 
-  // ---- lure ----
+  // ---- lure: an option now, not a first-run step ----
+  await page.click('#more > summary');
   await page.check('#lure_enabled');
   await page.waitForSelector('#lure-options', { state: 'visible' });
   await page.click('[data-key-setting="lure_key"]');
@@ -84,19 +87,37 @@ const errorFor = (page, name) => waitFor(page, (n) => document.querySelector(`[d
   await page.uncheck('#lure_enabled');
 
   // ---- more options ----
-  await page.click('#more > summary');
   await page.locator('input[name="scan_area"][value="center75"]').check({ force: true });
   await page.waitForTimeout(600);
   let now = (await saved(page)).settings;
   check(now.scan_area === 'center75' && now.fishing_key === '1' && now.lure_key === '2' && now.lure_minutes === 15 && now.lure_enabled === false, 'choices are saved as they are made', JSON.stringify({ watch: now.scan_area, key: now.fishing_key }));
   check(await page.locator('#pause_on_mouse_move').isChecked(), 'letting go when the mouse moves is on unless switched off');
 
-  // ---- take a look ----
-  await page.click('#check');
-  await page.waitForSelector('#preview-frame', { state: 'visible', timeout: 15000 }); await page.waitForFunction(() => document.querySelector('#preview').naturalWidth > 0);
-  check(await waitText(page, '#check-message', 'This is what it sees. The bobber has to land inside the blue box.', 15000), 'Take a look shows the picture and says what to check', await text(page, '#check-message'));
-  check(await page.evaluate(() => document.querySelector('#preview').naturalWidth) === 640, 'the picture loaded');
   await page.click('#more > summary');
+
+  // ---- step 2: check my game ----
+  await page.click('#check');
+  check(await waitFor(page, () => !document.querySelector('#look-result').hidden && document.querySelector('#look-picture').naturalWidth === 640, null, 20000), 'Check my game shows what it sees, on this page');
+  check((await text(page, '#look-caption')) === 'This is what it sees. The bobber has to land inside the blue box.', 'and says what to look for', await text(page, '#look-caption'));
+  await page.click('#look-no');
+  check(await page.locator('#look-help').isVisible(), 'Not yet says what to fix');
+  await page.click('#look-yes');
+  check(await page.evaluate(() => document.querySelector('#step-look').classList.contains('done') && document.querySelector('#look-body').hidden && !document.querySelector('#cast-body').hidden), 'Yes ticks the step and opens the last one');
+
+  // ---- step 3: one test cast ----
+  await page.click('#test-cast');
+  check(await waitText(page, '#status-title', 'Test cast', 15000), 'Do one test cast starts a test cast');
+  check(await waitFor(page, () => !document.querySelector('#cast-result').hidden && document.querySelector('#cast-picture').naturalWidth > 0, null, 40000), 'it comes back with a picture of what it clicked');
+  const afterTest = await saved(page);
+  check(afterTest.stats.casts === 1 && afterTest.stats.looted === 1 && afterTest.running === false && afterTest.settings.stop_after_catches === 0, 'it was exactly one cast, and your own limits are untouched', JSON.stringify({ casts: afterTest.stats.casts, caught: afterTest.stats.looted }));
+  check((await text(page, '#status-detail')) === 'The test cast is done.' && await page.locator('#recovery').isHidden(), 'the page says the test cast is done, without an alarm');
+  await picture(page, '01b-test-cast.png');
+  await page.click('#cast-no');
+  check(await page.locator('#cast-help').isVisible(), 'No says what to check');
+  await page.click('#cast-yes');
+  check(await page.locator('#guide-done').isVisible() && (await text(page, '#guide-done')).includes('Start fishing'), 'Yes finishes set-up and points at Start fishing');
+  await page.reload();
+  check(await waitText(page, '#status-title', 'Ready') && await waitFor(page, () => !document.querySelector('#guide-done').hidden && document.querySelector('#look-body').hidden), 'set-up stays finished when the page is opened again');
 
   // ---- fishing ----
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -104,6 +125,7 @@ const errorFor = (page, name) => waitFor(page, (n) => document.querySelector(`[d
   check(await waitText(page, '#status-title', 'Fishing', 15000), 'Start leads to Fishing');
   check(await page.locator('#stop').isVisible() && await page.locator('#pause').isVisible() && await page.locator('#start').isHidden() && await page.locator('#practice-line').isHidden(), 'Pause and Stop take the place of Start');
   check(await page.evaluate(() => document.querySelector('#setup').disabled && document.querySelector('#more-settings').disabled) && await page.locator('#setup-locked').isVisible(), 'set-up is locked while it fishes');
+  check(await waitFor(page, () => !document.querySelector('#live-block').hidden && document.querySelector('#preview').naturalWidth > 0, null, 15000), 'What it sees shows the live picture while it fishes');
   check(await waitFor(page, () => Number(document.querySelector('#stat-looted').innerText) >= 1, null, 40000), 'it catches a fish in the pretend game', `caught ${await text(page, '#stat-looted')}`);
   await page.waitForTimeout(1600);
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -127,6 +149,7 @@ const errorFor = (page, name) => waitFor(page, (n) => document.querySelector(`[d
   await page.click('#stop');
   check(await waitText(page, '#status-title', 'Ready', 8000) && (await text(page, '#status-detail')) === 'Open the game, then press Start fishing.', 'Stop leads back to Ready and says what to do next');
   check(await page.locator('#recovery').isHidden() && await page.evaluate(() => !document.querySelector('#setup').disabled), 'no alarm after stopping it yourself, and set-up unlocks');
+  check(await page.locator('#live-block').isHidden(), 'What it sees goes away when it is not running');
 
   // ---- a limit you set yourself is a calm stop, not an alarm ----
   await page.click('#more > summary');
@@ -149,6 +172,10 @@ const errorFor = (page, name) => waitFor(page, (n) => document.querySelector(`[d
   await page.fill('#stop_after_misses', '1'); await page.press('#stop_after_misses', 'Tab');
   await page.waitForTimeout(600);
   await page.click('#more > summary');
+  await page.click('[data-reopen="cast"]');
+  await page.click('#test-cast');
+  check(await waitFor(page, () => document.querySelector('#cast-message').innerText.startsWith('It did not see a bite on that cast.'), null, 40000), 'a test cast with no bite says so and what to check', await text(page, '#cast-message'));
+  check(await page.locator('#recovery').isHidden() && (await text(page, '#status-title')) === 'Ready', 'and that is not an alarm either');
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.click('#start');
   check(await waitFor(page, () => !document.querySelector('#recovery').hidden, null, 40000) && (await text(page, '#status-detail')).startsWith('No bite on the last cast.'), 'it stops by itself when nothing bites', await text(page, '#status-detail'));

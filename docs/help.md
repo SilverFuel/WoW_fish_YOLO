@@ -52,6 +52,9 @@ A few things are different on a Mac:
 - Run the game in **Windowed** or **Windowed (Fullscreen)** mode.
 - If you start the game as administrator, start this the same way: right-click `Start on Windows.bat` and
   choose **Run as administrator**. Otherwise Windows will not let it press keys in the game.
+- If `Alt`+`Z` opens the NVIDIA overlay instead of hiding the buttons and bars, the two share that shortcut.
+  In the game, open Options > Keybindings, find **Toggle User Interface** and give it another key. Or change
+  the overlay's shortcut in the NVIDIA app's settings.
 
 ## While fishing
 

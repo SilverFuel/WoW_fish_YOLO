@@ -69,6 +69,12 @@ back to your browser yourself; the result is waiting there.
 game, zoomed all the way in, with no buttons or bars. If that looks right and it still misses bites, stop it,
 open **More options** and lower **How sure it must be** a little.
 
+**It gets confused when other people are fishing nearby.** It looks for a bite anywhere in the part of the game
+it watches, and it cannot tell your bobber from someone else's. Open **More options** and choose **Watch the
+middle** or **Watch a small middle**, so bobbers off to the sides are ignored; **Check my game** shows the area
+as a blue box, and your own bobber has to land inside it. Turning so that no other bobbers are in view works
+too.
+
 **It paused and I did not touch the mouse.** Open **More options** and switch off **Let go when I move the
 mouse**.
 

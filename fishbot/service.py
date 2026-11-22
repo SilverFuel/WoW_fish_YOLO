@@ -160,7 +160,7 @@ class BotService:
                             settings.confidence, settings.scan_area)
             bot = FishingBot(settings, window, vision, self._controls_once(), log=self.log,
                              on_click=lambda x, y, practised: self._remember_click(vision, x, y, practised),
-                             practice=practice, on_look=self._recorder.look)
+                             practice=practice, on_look=self._recorder.look, stop_if_mouse_moves=self._test)
             with self._lock:
                 self._bot, self._vision = bot, vision
                 self._starting = False
@@ -187,6 +187,7 @@ class BotService:
                 message, level = f'Stopped because something went wrong: {error}', 'error'
         finally:
             finished.set()
+            self._release_capture()
 
         with self._lock:
             if bot is not None:
@@ -201,7 +202,8 @@ class BotService:
                     if bot.stats.looted:
                         self._test_result, message = 'caught', 'The test cast is done.'
                     elif bot.stats.missed:
-                        self._test_result, message = 'no_bite', 'The test cast saw no bite.'
+                        self._test_result = 'no_bite'
+                        message = f'The test cast saw no bite. {bot.why_no_bite}'.strip()
                         self._stopped_by_safeguard = False
                     else:
                         self._test_result = 'stopped'
@@ -210,6 +212,12 @@ class BotService:
             self._message = message
         self.log(message, level)
         self._hand_back(hand_back_to)
+
+    def _release_capture(self):
+        """Each session and each check runs on its own thread, and screen capture handles belong to a thread."""
+        close = getattr(self._grabber, 'close', None)
+        if close is not None:
+            close()
 
     def _front_window(self):
         """What the person has in front right now, normally this page, so it can be handed back."""
@@ -284,6 +292,7 @@ class BotService:
         try:
             return self._look_once(window)
         finally:
+            self._release_capture()
             self._hand_back(came_from)
 
     def _look_once(self, window):

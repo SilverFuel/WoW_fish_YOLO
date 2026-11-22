@@ -262,3 +262,77 @@ def test_black_pictures_are_counted_in_a_row(splash_detector, calm):
 def test_blank_capture_is_recognised():
     assert vision.looks_blank(np.zeros((10, 10, 3), dtype=np.uint8))
     assert not vision.looks_blank(np.full((10, 10, 3), 40, dtype=np.uint8))
+
+
+# ----- found on the first run against a real game -----
+
+def test_distinct_candidates_come_back_surest_first_without_repeats():
+    output = np.zeros((1, 5, 5), dtype=np.float32)
+    output[0, :, 0] = (100, 100, 40, 40, 0.95)
+    output[0, :, 1] = (102, 101, 40, 40, 0.90)   # the same thing again, slightly shifted
+    output[0, :, 2] = (300, 200, 40, 40, 0.85)
+    output[0, :, 3] = (500, 100, 40, 40, 0.40)   # below the bar
+    output[0, :, 4] = (301, 201, 42, 40, 0.97)
+
+    found = detector.detections(output, scale=1.0, padding=(0, 0), minimum=0.5)
+
+    assert [round(box.score, 2) for box in found] == [0.97, 0.95]
+    assert found[0].center == pytest.approx((301, 201)) and found[1].center == pytest.approx((100, 100))
+
+
+def test_a_surer_candidate_at_the_edge_does_not_hide_a_bite_in_the_middle(splash_detector, calm, splash):
+    # Another player's splash at the border, or something drawn over the game there.
+    rows = slice(SPLASH_CENTER[1] - 60, SPLASH_CENTER[1] + 60)
+    picture = splash.copy()
+    picture[rows, 0:100] = splash[rows, SPLASH_CENTER[0] - 20:SPLASH_CENTER[0] + 80]   # a second one, centred 20 px in
+    watcher = vision.Vision(splash_detector, ArrayGrabber(picture), confidence=0.8, scan_area='full')
+
+    position = watcher.find_splash(dict(demo.REGION))
+
+    at_the_edge = [box for box in splash_detector.detect_all(picture, minimum=0.8)
+                   if box.center[0] < vision.EDGE_MARGIN * 640]
+    assert at_the_edge, 'the picture needs a confident candidate at the edge for this to mean anything'
+    assert position == pytest.approx(SPLASH_CENTER, abs=8)
+    assert watcher.last.confident is True and watcher.last.note == ''
+
+
+@pytest.mark.parametrize('width, height, area, expected', [
+    (1920, 1080, 'full', 640), (2560, 1440, 'full', 640), (1920, 1200, 'full', 640), (1024, 768, 'full', 640),
+    (3440, 1440, 'full', 864), (2560, 1080, 'full', 864), (5120, 1440, 'full', 1280),
+    (1720, 720, 'center50', 448),
+])
+def test_a_wide_game_gets_a_wider_input_so_the_bobber_keeps_its_size(splash_detector, width, height, area, expected):
+    watcher = vision.Vision(splash_detector, ArrayGrabber(np.zeros((1, 1, 3), np.uint8)), confidence=0.8, scan_area=area)
+
+    assert watcher._input_size(width, height) == expected
+
+
+def test_the_splash_is_still_found_on_a_very_wide_screen(splash_detector, splash):
+    # 32:9. Shrunk to the usual width, the bobber would be half the size the model learnt.
+    middle = cv2.resize(splash, (2560, 1440), interpolation=cv2.INTER_CUBIC)
+    wide = cv2.copyMakeBorder(middle, 0, 0, 1280, 1280, cv2.BORDER_REPLICATE)
+    watcher = vision.Vision(splash_detector, ArrayGrabber(wide), confidence=0.8, scan_area='full')
+
+    position = watcher.find_splash({'left': 0, 'top': 0, 'width': 5120, 'height': 1440})
+
+    assert position == pytest.approx((1280 + SPLASH_CENTER[0] * 4, SPLASH_CENTER[1] * 4), abs=40)
+
+
+def test_capture_handles_are_let_go_per_thread():
+    closed = []
+
+    class Screen:
+        def grab(self, region):
+            return np.zeros((2, 2, 4), dtype=np.uint8)
+
+        def close(self):
+            closed.append(True)
+
+    grabber = vision.ScreenGrabber()
+    grabber._local.screen = Screen()
+    grabber.grab({'left': 0, 'top': 0, 'width': 2, 'height': 2})
+
+    grabber.close()
+    grabber.close()   # nothing left to close; must not fail
+
+    assert closed == [True]

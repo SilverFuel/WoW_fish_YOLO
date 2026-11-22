@@ -366,7 +366,9 @@ function showTestCast() {
     if (state.test_result === 'caught') {
       clicked = state.clicks.find((click) => !click.practice) || null;
     } else if (state.test_result === 'no_bite') {
-      text = 'It did not see a bite on that cast. Check that your fishing key is right and that the game looks like the picture in step 2, then try again.';
+      // The app's own sentence says how close it came, which tells you what to change.
+      const why = state.message.replace('The test cast saw no bite.', '').trim();
+      text = `It did not see a bite on that cast. ${why} Check that your fishing key is right and that the game looks like the picture in step 2, then try again.`.replace('  ', ' ');
     } else if (state.test_result === 'stopped') {
       text = state.message === 'Stopped.' ? 'The test cast was stopped before it finished.' : state.message;
     }

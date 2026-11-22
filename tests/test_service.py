@@ -172,6 +172,30 @@ def test_a_test_cast_is_one_cast_and_hands_the_page_back(service, platform):
     assert service.store.settings.stop_after_catches == 0  # the saved settings are untouched
 
 
+def test_a_test_cast_ends_rather_than_pauses_when_the_mouse_is_taken(service, monkeypatch):
+    # A paused test cast would never finish, and the page would wait for it for ever.
+    import fishbot.service as service_module
+
+    asked = []
+    real_bot = service_module.FishingBot
+
+    def remember(*arguments, **options):
+        asked.append(options.get('stop_if_mouse_moves'))
+        return real_bot(*arguments, **options)
+
+    monkeypatch.setattr(service_module, 'FishingBot', remember)
+
+    service.start(test=True)
+    assert wait_for(lambda: not service.running, timeout=30)
+    service.wait(10)
+    service.start()
+    assert wait_for(lambda: service.snapshot()['state'] == 'fishing')
+    service.stop()
+    service.wait(10)
+
+    assert asked == [True, False]
+
+
 def test_a_test_cast_with_no_bite_says_so_without_an_alarm(service, platform):
     platform.game.bite_after = (1000, 1000)
     service.store.update({'cast_seconds': 5})
@@ -182,7 +206,7 @@ def test_a_test_cast_with_no_bite_says_so_without_an_alarm(service, platform):
 
     snapshot = service.snapshot()
     assert snapshot['test_result'] == 'no_bite'
-    assert snapshot['message'] == 'The test cast saw no bite.'
+    assert snapshot['message'] == 'The test cast saw no bite. It saw nothing that looked like one.'
     assert snapshot['stopped_by_safeguard'] is False
     assert platform.brought_back == ['the page']
 

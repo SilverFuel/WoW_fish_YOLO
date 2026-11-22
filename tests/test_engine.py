@@ -1154,3 +1154,126 @@ def test_the_bot_says_so_when_it_is_waiting_for_the_mouse():
 
     assert game.messages.count('Waiting for you to let go of the mouse.') == 1
     assert game.controls.events == []
+
+
+# ----- found on the first run against a real game: it never clicked -----
+
+def test_a_hand_resting_on_the_mouse_does_not_make_it_let_go():
+    # A few pixels of drift is a hand on the mouse, not someone taking it back.
+    def drifts(frame):
+        game.controls.pointer = (game.controls.pointer[0] + 6, game.controls.pointer[1] - 4)
+        return game.a_real_bite(frame)
+
+    game = Game(settings=HANDS_OFF, on_frame=drifts)
+    game.stop_after('click', 2)
+
+    game.bot.run()
+
+    assert game.controls.count('click') == 2
+    assert not any('moved the mouse' in message for message in game.messages)
+
+
+def test_how_far_the_mouse_has_to_move_follows_the_size_of_the_game_window():
+    game = Game(settings=HANDS_OFF)
+    assert game.bot._took_the_mouse_distance() == engine.TOOK_THE_MOUSE_PX   # before the first look
+
+    game.bot._window_width = 3840
+    assert game.bot._took_the_mouse_distance() == pytest.approx(0.03 * 3840)
+
+
+def test_a_test_cast_stops_instead_of_pausing_when_the_mouse_is_taken():
+    # Nobody is at the page to press Resume during a test cast, so a pause would never end.
+    def user_grabs_the_mouse(frame):
+        if frame == 3:
+            game.controls.pointer = (200, 200)
+        return None
+
+    game = Game(settings=HANDS_OFF, on_frame=user_grabs_the_mouse)
+    game.bot._stop_if_mouse_moves = True
+
+    game.bot.run()
+
+    assert not game.bot.paused
+    assert game.bot.stop_reason == 'Stopped: the mouse moved, so it let go. Keep your hand off the mouse and try again.'
+    assert game.controls.count('click') == 0
+
+
+def test_resume_brings_the_game_back_to_the_front():
+    # Resume is pressed on the page, which leaves the browser in front.
+    game = Game()
+    resumed = []
+
+    def page_is_used(count):
+        if count == 5:
+            game.bot.set_paused(True)
+            game.window.foreground = False
+        if count == 20 and not resumed:
+            resumed.append(game.window.focus_calls)
+            game.window.focus = lambda: (setattr(game.window, 'foreground', True), resumed.append('focused'))
+            game.bot.set_paused(False)
+
+    game.clock.on_sleep = page_is_used
+    game.stop_after('click', 1)
+
+    game.bot.run()
+
+    assert 'focused' in resumed
+    assert game.controls.count('click') == 1
+
+
+def test_losing_the_front_during_a_cast_is_said_not_swallowed():
+    def game_loses_the_front(frame):
+        if frame == 3:
+            game.window.foreground = False
+        return None
+
+    game = Game(on_frame=game_loses_the_front)
+    game.clock.on_sleep = lambda count: (not game.window.foreground) and game.clock.now > 30 and game.bot.stop()
+
+    game.bot.run()
+
+    assert 'The game was no longer the window in front, so that cast was dropped.' in game.messages
+    assert game.controls.count('click') == 0
+
+
+def test_losing_the_front_just_before_the_click_is_said_too():
+    game = Game(on_frame=lambda frame: SPLASH)
+
+    def at_the_move(event):
+        if event[0] == 'move':
+            game.window.foreground = False
+
+    game.controls.on_event = at_the_move
+    game.clock.on_sleep = lambda count: (not game.window.foreground) and game.clock.now > 30 and game.bot.stop()
+
+    game.bot.run()
+
+    assert 'The game was no longer the window in front, so that click was skipped.' in game.messages
+    assert game.controls.count('click') == 0
+
+
+def test_a_pointer_that_does_not_land_on_the_bobber_gives_both_possible_reasons():
+    game = Game(settings=HANDS_OFF, on_frame=lambda frame: SPLASH)
+
+    def held_in_place(event):
+        if event[0] == 'move':
+            game.controls.pointer = (900, 700)   # where it was: the move did not take
+
+    game.controls.on_event = held_in_place
+    game.clock.on_sleep = lambda count: game.bot.paused and game.clock.now > 30 and game.bot.stop()
+
+    game.bot.run()
+
+    assert game.controls.count('click') == 0
+    assert ('Paused: the mouse pointer did not end up on the bobber. Either you moved the mouse, '
+            'or something is holding the pointer in place. Press Resume when you are ready.') in game.messages
+
+
+def test_stopping_after_misses_says_how_close_it_came_and_what_to_change():
+    game = Game(settings=replace(BASE, stop_after_misses=2))
+    game.bot._vision = game.vision = SeesSomethingUnsure(game.clock, [0.1, 0.71])
+
+    game.bot.run()
+
+    assert game.bot.stop_reason == ('Stopped: no bite in 2 casts in a row. The closest thing it saw was 71% sure, and it needs 80%. '
+                                    'If it keeps coming that close, lower "How sure it must be" under More options.')

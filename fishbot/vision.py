@@ -1,18 +1,21 @@
 """Screen capture plus detection: where on the screen is the splash, if anywhere."""
 from __future__ import annotations
 
+import math
 import threading
 from dataclasses import dataclass
 
 import cv2
 import numpy as np
 
+from fishbot.detector import STRIDE
 from fishbot.settings import SCAN_AREAS
 
 PREVIEW_WIDTH = 720
 CANDIDATE_SCORE = 0.05  # below this the best box is noise and is not drawn
 # A bobber does not land at the very edge of the window, where the game's interface sits.
 EDGE_MARGIN = 0.05
+TRAINED_SHAPE = 16 / 9  # width to height of the pictures the model learnt from
 # A splash is a small part of the picture: its box is between these shares of the window's width and height.
 SMALLEST_BOX, LARGEST_BOX = 0.005, 0.35
 
@@ -27,8 +30,20 @@ class ScreenGrabber:
         screen = getattr(self._local, 'screen', None)
         if screen is None:
             import mss
-            screen = self._local.screen = mss.mss()
+            # mss.MSS is the current name; older releases only have mss.mss.
+            screen = self._local.screen = (getattr(mss, 'MSS', None) or mss.mss)()
         return np.ascontiguousarray(np.asarray(screen.grab(region))[:, :, :3])  # BGRA -> BGR
+
+    def close(self):
+        """Let go of this thread's capture handles. Every session and every check runs on its own
+        thread, and a handle that is never closed keeps a screen-sized picture in memory."""
+        screen = getattr(self._local, 'screen', None)
+        if screen is not None:
+            self._local.screen = None
+            try:
+                screen.close()
+            except Exception:
+                pass
 
 
 def scan_region(region, fraction):
@@ -61,24 +76,50 @@ class Vision:
         self.looks = 0  # how many pictures have been taken; lets the page tell a new one from the last
         self.blank_streak = 0  # how many pictures in a row were black
 
+    def _input_size(self, width, height):
+        """The detector's input size for an area of this shape.
+
+        The model learnt the bobber at the size it has in a 16:9 picture shrunk to 640 wide. A wider
+        area shrunk to that same width would make the bobber smaller than anything it learnt, so a
+        wider area gets a proportionally wider input and the bobber keeps its size.
+        """
+        widest = TRAINED_SHAPE * height
+        if width <= widest * 1.02:
+            return self._size
+        return int(math.ceil(self._size * width / widest / STRIDE)) * STRIDE
+
+    def _choose(self, candidates, origin, to_screen, region):
+        """Pick what to act on: the surest candidate that is sure enough and passes the position and size
+        rules. A surer one that fails them does not hide it.
+
+        Returns (candidate, its screen position, whether to act on it, why the surest one was held back).
+        """
+        def on_screen(candidate):
+            return (int(origin[0] + candidate.center[0] * to_screen[0]),
+                    int(origin[1] + candidate.center[1] * to_screen[1]))
+
+        held_back = ''
+        for candidate in candidates:
+            if candidate.score < self._confidence:
+                break
+            box = ((candidate.x2 - candidate.x1) * to_screen[0], (candidate.y2 - candidate.y1) * to_screen[1])
+            note = implausible(on_screen(candidate), box, region)
+            if not note:
+                return candidate, on_screen(candidate), True, ''
+            held_back = held_back or note
+        return candidates[0], on_screen(candidates[0]), False, held_back
+
     def find_splash(self, region):
         """Return the screen position of the splash inside the window ``region``, or None."""
         scan = scan_region(region, self._fraction)
         frame = self._grabber.grab(scan)
-        detection = self._detector.detect(frame, self._size)
+        candidates = self._detector.detect_all(frame, self._input_size(frame.shape[1], frame.shape[0]), self._confidence)
         self.looks += 1
         self.blank_streak = self.blank_streak + 1 if looks_blank(frame) else 0
 
         # Frame pixels are not always screen units (scaled displays), so convert explicitly.
-        to_screen_x, to_screen_y = scan['width'] / frame.shape[1], scan['height'] / frame.shape[0]
-        center_x, center_y = detection.center
-        position = (scan['left'] + int(center_x * to_screen_x), scan['top'] + int(center_y * to_screen_y))
-
-        note = ''
-        if detection.score >= self._confidence:
-            box = ((detection.x2 - detection.x1) * to_screen_x, (detection.y2 - detection.y1) * to_screen_y)
-            note = implausible(position, box, region)
-        confident = detection.score >= self._confidence and not note
+        to_screen = scan['width'] / frame.shape[1], scan['height'] / frame.shape[0]
+        detection, position, confident, note = self._choose(candidates, (scan['left'], scan['top']), to_screen, region)
         self.last = Sighting(frame, detection, confident, note=note)
 
         return position if confident else None
@@ -90,17 +131,14 @@ class Vision:
         scan_width, scan_height = max(1, int(round(width * self._fraction))), max(1, int(round(height * self._fraction)))
         left, top = (width - scan_width) // 2, (height - scan_height) // 2
 
-        detection = self._detector.detect(frame[top:top + scan_height, left:left + scan_width], self._size)
+        candidates = self._detector.detect_all(frame[top:top + scan_height, left:left + scan_width],
+                                               self._input_size(scan_width, scan_height), self._confidence)
 
-        # The same position and size rules as a real look, so a green box means "it would click this".
-        note = ''
-        if detection.score >= self._confidence:
-            to_screen_x, to_screen_y = region['width'] / width, region['height'] / height
-            center_x, center_y = detection.center
-            position = (region['left'] + int((left + center_x) * to_screen_x), region['top'] + int((top + center_y) * to_screen_y))
-            box = ((detection.x2 - detection.x1) * to_screen_x, (detection.y2 - detection.y1) * to_screen_y)
-            note = implausible(position, box, region)
-        self.last = Sighting(frame, detection, detection.score >= self._confidence and not note,
+        # The same choice as a real look, so a green box means "it would click this".
+        to_screen = region['width'] / width, region['height'] / height
+        origin = (region['left'] + left * to_screen[0], region['top'] + top * to_screen[1])
+        detection, _, confident, note = self._choose(candidates, origin, to_screen, region)
+        self.last = Sighting(frame, detection, confident,
                              offset=(left, top), scan_size=(scan_width, scan_height), note=note)
         self.looks += 1
         return self.last

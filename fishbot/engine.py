@@ -23,8 +23,11 @@ SETTLE_AFTER_CAST_SEC = 1.0
 STILL_BEFORE_START_SEC = 0.7
 # If that takes longer than this, say what the bot is waiting for.
 MENTION_MOUSE_AFTER_SEC = 2.0
-# The pointer moving further than this, when the bot did not move it, means the user took the mouse.
-POINTER_MOVED_PX = 8
+POINTER_MOVED_PX = 8          # the mouse counts as still while it stays within this
+# Taking the mouse back means moving it clearly, not a hand resting on it: this far, or this share of
+# the game window's width, whichever is more. The click goes to the bite itself, so a small drift is harmless.
+TOOK_THE_MOUSE_PX = 40
+TOOK_THE_MOUSE_SHARE = 0.03
 # After the bot pauses itself, a press of the pause key within this time means "pause", not "resume".
 KEEP_OWN_PAUSE_SEC = 5.0
 # A bite this soon after casting, this many times running, is not fishing: something on screen
@@ -85,7 +88,7 @@ class FishingBot:
     """
 
     def __init__(self, settings, window, vision, controls, clock=time.monotonic, idle=time.sleep, log=print,
-                 on_click=None, practice=False, on_look=None):
+                 on_click=None, practice=False, on_look=None, stop_if_mouse_moves=False):
         self._settings = settings
         self._practice = practice  # watch only: nothing is pressed or clicked
         self._window = window
@@ -97,6 +100,11 @@ class FishingBot:
         self._on_click = on_click
         self._on_look = on_look          # called with (cast number, seconds since the cast, what was seen)
         self._best_this_cast = None      # how sure the surest look of the current cast was
+        self.why_no_bite = ''            # the reason given for the last cast that ended without a click
+        # A single test cast has nobody to press Resume for it, so it ends instead of pausing.
+        self._stop_if_mouse_moves = stop_if_mouse_moves
+        self._window_width = 0           # of the game window, from the last look
+        self._bring_game_forward = False  # asked for by Resume, done by the fishing loop
         self._stop = threading.Event()
         self._stop_lock = threading.Lock()
         self._paused = threading.Event()
@@ -136,6 +144,8 @@ class FishingBot:
             self._log(message or 'Paused.')
         else:
             self._paused_itself_at = None
+            # Resume is normally pressed on the page, which leaves the browser in front.
+            self._bring_game_forward = True
             self._paused.clear()
             self._log('Resumed.')
 
@@ -237,8 +247,14 @@ class FishingBot:
         misses = self._settings.stop_after_misses
         if misses and self.stats.misses_in_a_row >= misses:
             what = 'no bite on the last cast' if misses == 1 else f'no bite in {misses} casts in a row'
-            self._trip(f'Stopped: {what}. Check that the fishing key is right, '
-                       'and that the game is zoomed all the way in with the buttons and bars hidden.')
+            advice = ('Check that the fishing key is right, and that the game is zoomed all the way in '
+                      'with the buttons and bars hidden.')
+            if 'closest thing' in self.why_no_bite:
+                advice = (f'{self.why_no_bite} If it keeps coming that close, lower "How sure it must be" '
+                          'under More options.')
+            elif self.why_no_bite:
+                advice = f'{self.why_no_bite} {advice}'
+            self._trip(f'Stopped: {what}. {advice}')
             return True
 
         return False
@@ -296,12 +312,23 @@ class FishingBot:
     def _user_took_the_mouse(self):
         """Whether the pointer is somewhere the bot did not leave it. If so, pause and hand over."""
         now = self._pointer_now()
-        if now is None or self._pointer is None or not _far_apart(now, self._pointer, POINTER_MOVED_PX):
+        if now is None or self._pointer is None or not _far_apart(now, self._pointer, self._took_the_mouse_distance()):
             return False
 
-        self._paused_itself_at = self._clock()
-        self.set_paused(True, 'Paused because you moved the mouse. Press Resume when you are ready.')
+        self._let_go('Paused because you moved the mouse. Press Resume when you are ready.',
+                     'Stopped: the mouse moved, so it let go. Keep your hand off the mouse and try again.')
         return True
+
+    def _let_go(self, paused, stopped):
+        """Hand the mouse over: pause, or in a test cast, which has nobody to resume it, stop."""
+        if self._stop_if_mouse_moves:
+            self.stop(stopped)
+            return
+        self._paused_itself_at = self._clock()
+        self.set_paused(True, paused)
+
+    def _took_the_mouse_distance(self):
+        return max(TOOK_THE_MOUSE_PX, TOOK_THE_MOUSE_SHARE * self._window_width)
 
     def _require_still_mouse(self):
         self._mouse_must_settle = True
@@ -355,7 +382,17 @@ class FishingBot:
             if self._paused.is_set():
                 self.state = PAUSED
                 waiting_for_mouse_since = None
-            elif self._window.is_foreground() and self._window.capture_region() is not None:
+                self._idle(POLL_INTERVAL_SEC)
+                continue
+
+            if self._bring_game_forward:
+                self._bring_game_forward = False
+                if not practice and not self._window.is_foreground():
+                    self._window.focus()
+                    self._idle(POLL_INTERVAL_SEC * 3)  # coming forward takes a moment
+                    continue
+
+            if self._window.is_foreground() and self._window.capture_region() is not None:
                 # In practice mode the user is playing, so the mouse is theirs throughout.
                 if practice or self._mouse_has_settled():
                     self.state = PRACTICE if practice else FISHING
@@ -431,11 +468,16 @@ class FishingBot:
 
         while self._clock() < deadline:
             frame_started = self._clock()
-            if self._user_took_the_mouse() or not self._can_act():
+            if self._user_took_the_mouse():
+                return CastResult.INTERRUPTED
+            if not self._can_act():
+                self._say_if_not_in_front('so that cast was dropped')
                 return CastResult.INTERRUPTED
 
             # Read on every frame, so the window can be moved or resized while fishing.
             region = self._window.capture_region()
+            if region is not None:
+                self._window_width = region['width']
             if region is None:
                 # The system could not say where the window is. That can last a moment while the game
                 # is still in front, so skip this look rather than give up the cast. Nothing is sent
@@ -481,27 +523,58 @@ class FishingBot:
 
     def _why_no_bite(self):
         """The line for a cast that ended without a click, with the reason when there is one to give."""
-        if self._best_this_cast is None:
-            return 'No bite on that cast.'
-        sure, needed = round(self._best_this_cast * 100), round(self._settings.confidence * 100)
-        if sure >= needed:
-            return 'No bite on that cast.'  # it was sure enough and held back for a reason it already gave
-        if sure < 5:
-            return 'No bite on that cast. It saw nothing that looked like one.'
-        return f'No bite on that cast. The closest thing it saw was {sure}% sure, and it needs {needed}%.'
+        self.why_no_bite = ''
+        if self._best_this_cast is not None:
+            sure, needed = round(self._best_this_cast * 100), round(self._settings.confidence * 100)
+            if sure < 5:
+                self.why_no_bite = 'It saw nothing that looked like one.'
+            elif sure < needed:
+                self.why_no_bite = f'The closest thing it saw was {sure}% sure, and it needs {needed}%.'
+            # Otherwise it was sure enough and held back for a reason it has already given.
+        return f'No bite on that cast. {self.why_no_bite}'.strip()
 
     # Right click on the bobber to loot the fish, player must enable automatic looting
+    def _say_if_not_in_front(self, consequence):
+        """Nothing is skipped in silence: if the game lost the front on its own, say what that cost."""
+        if not self._stop.is_set() and not self._paused.is_set():
+            self._log(f'The game was no longer the window in front, {consequence}.')
+
+    def _click_is_off(self, region):
+        if self._window_moved(region) or self._user_took_the_mouse():
+            return True
+        if not self._can_act():
+            self._say_if_not_in_front('so that click was skipped')
+            return True
+        return False
+
+    def _pointer_missed(self, x, y):
+        """Whether the pointer is somewhere else right after the bot moved it onto the bobber.
+
+        Either the person moved the mouse meanwhile, or something is holding the pointer. The bot
+        cannot tell which, so it lets go rather than push against a hand, and says both.
+        """
+        landed = self._pointer_now()
+        if landed is None or not _far_apart(landed, (x, y), self._took_the_mouse_distance()):
+            return False
+        self._pointer = landed
+        why = ('the mouse pointer did not end up on the bobber. Either you moved the mouse, '
+               'or something is holding the pointer in place.')
+        self._let_go(f'Paused: {why} Press Resume when you are ready.', f'Stopped: {why}')
+        return True
+
     def _loot(self, x, y, region):
         self._sleep(random.random())
-        if self._window_moved(region) or self._user_took_the_mouse() or not self._can_act():
+        if self._click_is_off(region):
             return False
         self._controls.moveTo(x, y, random.uniform(0.1, 0.3))
+        if self._pointer_missed(x, y):
+            return False
         self._expect_pointer_at(x, y)
 
         self._sleep(random.random())
         # The last look before the click, slowest question first: is the window still where the
         # splash was seen, is the mouse still where the bot left it, and has nobody stopped or paused.
-        if self._window_moved(region) or self._user_took_the_mouse() or not self._can_act():
+        if self._click_is_off(region):
             return False
         # Click at the splash itself rather than wherever the pointer is.
         self._controls.click(x=x, y=y, button='right')

@@ -233,8 +233,16 @@ def facts():
     return lines
 
 
+# Alt, Ctrl, Shift and the two Windows keys. Other programs use shortcuts such as Alt+F9 (the NVIDIA
+# overlay starts a recording with it), and those must not pause or stop the bot.
+_MODIFIER_KEYS = (win32con.VK_MENU, win32con.VK_CONTROL, win32con.VK_SHIFT, win32con.VK_LWIN, win32con.VK_RWIN)
+
+
 def key_is_down(name):
-    return bool(win32api.GetAsyncKeyState(keys.WINDOWS_VK[name]) & 0x8000)
+    """Whether a pause or stop key is held on its own, without Alt, Ctrl, Shift or the Windows key."""
+    if not win32api.GetAsyncKeyState(keys.WINDOWS_VK[name]) & 0x8000:
+        return False
+    return not any(win32api.GetAsyncKeyState(modifier) & 0x8000 for modifier in _MODIFIER_KEYS)
 
 
 def permission_problems():

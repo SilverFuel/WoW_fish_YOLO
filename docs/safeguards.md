@@ -8,7 +8,7 @@ clicks what plausibly is a bite, and it stops and says why as soon as things sto
 | What could go wrong | What it does |
 |---|---|
 | Keys or clicks land in another program | It only presses and clicks while the game is the window in front. Otherwise it waits. |
-| You need the mouse back | Move it and it pauses at once, before its next key press or click. `F8` pauses and `F9` stops, as do the buttons on the page and pushing the mouse into a corner of the screen. |
+| You need the mouse back | Move it clearly and it pauses at once, before its next key press or click. A hand just resting on the mouse does not count. `F8` pauses and `F9` stops, as do the buttons on the page and pushing the mouse into a corner of the screen. |
 | It mistakes something else for a bite | It ignores anything in the first second after casting, at the edge of the game window, or the wrong size for a splash. If the game window moved, it skips the click. |
 | It keeps clicking the same wrong thing | It stops when 3 "bites" in a row come within 2 seconds of casting, or when 4 of its last 8 clicks land on the very same spot. A real bobber does neither. |
 | Something keeps interrupting the cast | It stops after 8 casts in 20 seconds instead of hammering the key. |

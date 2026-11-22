@@ -52,6 +52,7 @@ A few things are different on a Mac:
 - Run the game in **Windowed** or **Windowed (Fullscreen)** mode.
 - If you start the game as administrator, start this the same way: right-click `Start on Windows.bat` and
   choose **Run as administrator**. Otherwise Windows will not let it press keys in the game.
+- `F8` and `F9` only count when pressed on their own. `Alt`+`F9`, which the NVIDIA overlay uses, does not stop it.
 - If `Alt`+`Z` opens the NVIDIA overlay instead of hiding the buttons and bars, the two share that shortcut.
   In the game, open Options > Keybindings, find **Toggle User Interface** and give it another key. Or change
   the overlay's shortcut in the NVIDIA app's settings.
@@ -89,8 +90,10 @@ middle** or **Watch a small middle**, so bobbers off to the sides are ignored; *
 as a blue box, and your own bobber has to land inside it. Turning so that no other bobbers are in view works
 too.
 
-**It paused and I did not touch the mouse.** Open **More options** and switch off **Let go when I move the
-mouse**.
+**It paused and I did not touch the mouse.** It lets go when the mouse pointer moves clearly, or when the
+pointer does not end up where it put it. If something on your computer moves or holds the pointer, open **More
+options** and switch off **Let go when I move the mouse**. After a pause, **Resume** brings the game back to the
+front by itself.
 
 **It stopped with "no bite".** Usually the fishing key is wrong, or the game is not zoomed all the way in with
 the buttons and bars hidden. It can only tell that no bite appeared. It cannot tell whether a fish reached your
@@ -99,6 +102,9 @@ bags, so full bags or Auto Loot being off never cause this stop.
 **My bags filled up.** It cannot see your bags, and it does nothing with what is in them. When the bags are
 full it keeps casting and clicking, but nothing more is kept. Make room before you start, set a limit on catches or time under
 **More options**, and see [Keeping your bags clear](#keeping-your-bags-clear-optional) below.
+
+**I have a very wide screen.** That is handled: on a screen wider than 16:9 it looks at a wider picture, so
+the bobber keeps the size it knows. It uses a little more of your computer for that.
 
 **It makes my computer slow.** Open **More options** and choose **Watch the middle**. The bobber then has to
 land in the middle of the screen; **Check my game** shows the area as a blue box.

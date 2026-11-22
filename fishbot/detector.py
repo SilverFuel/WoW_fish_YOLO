@@ -71,6 +71,38 @@ def best_detection(output, scale, padding):
                      (center_x + box_width / 2 - left) / scale, (center_y + box_height / 2 - top) / scale)
 
 
+def detections(output, scale, padding, minimum, limit=5):
+    """The distinct candidates scoring at least ``minimum``, surest first, at most ``limit`` of them.
+
+    The network proposes many overlapping boxes for one thing; boxes that overlap a surer one are
+    dropped, so each entry is a different thing on screen.
+    """
+    predictions = output[0]
+    order = [int(index) for index in np.argsort(-predictions[4]) if predictions[4, index] >= minimum][:200]
+    left, top = padding
+    kept = []
+    for index in order:
+        center_x, center_y, box_width, box_height, score = (float(value) for value in predictions[:, index])
+        box = Detection(score,
+                        (center_x - box_width / 2 - left) / scale, (center_y - box_height / 2 - top) / scale,
+                        (center_x + box_width / 2 - left) / scale, (center_y + box_height / 2 - top) / scale)
+        if all(_overlap(box, other) < 0.5 for other in kept):
+            kept.append(box)
+            if len(kept) == limit:
+                break
+    return kept
+
+
+def _overlap(a, b):
+    """How much two boxes overlap, from 0 (apart) to 1 (the same box)."""
+    width = min(a.x2, b.x2) - max(a.x1, b.x1)
+    height = min(a.y2, b.y2) - max(a.y1, b.y1)
+    if width <= 0 or height <= 0:
+        return 0.0
+    shared = width * height
+    return shared / ((a.x2 - a.x1) * (a.y2 - a.y1) + (b.x2 - b.x1) * (b.y2 - b.y1) - shared)
+
+
 class SplashDetector:
     def __init__(self, model_path=DEFAULT_MODEL, threads=2):
         options = onnxruntime.SessionOptions()
@@ -96,3 +128,14 @@ class SplashDetector:
         output = self._session.run(None, {self._input_name: tensor})[0]
         self.last_inference_ms = (time.perf_counter() - started) * 1000
         return best_detection(output, scale, padding)
+
+    def detect_all(self, frame, size=MODEL_INPUT_SIZE, minimum=0.5):
+        """The best candidate, as ``detect`` gives it, followed by the other distinct ones scoring
+        at least ``minimum``. The list always has the best one first, whatever it scores."""
+        started = time.perf_counter()
+        tensor, scale, padding = letterbox(frame, size)
+        output = self._session.run(None, {self._input_name: tensor})[0]
+        self.last_inference_ms = (time.perf_counter() - started) * 1000
+        best = best_detection(output, scale, padding)
+        others = [box for box in detections(output, scale, padding, minimum) if _overlap(box, best) < 0.5]
+        return [best, *others]

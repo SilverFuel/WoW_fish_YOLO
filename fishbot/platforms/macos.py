@@ -161,6 +161,46 @@ class GameWindow:
         return region if region['width'] > 0 and region['height'] > 0 else None
 
 
+def facts():
+    """Plain facts about this computer's screens and the game window, for the report. Never raises."""
+    import platform as host
+
+    lines = []
+
+    def add(name, read):
+        try:
+            lines.append(f'{name}: {read()}')
+        except Exception as error:  # a fact that cannot be read is itself worth knowing
+            lines.append(f'{name}: could not be read ({type(error).__name__}: {error})')
+
+    def screens():
+        import Quartz
+        error, displays, count = Quartz.CGGetActiveDisplayList(16, None, None)
+        described = []
+        for display in list(displays)[:count]:
+            bounds = Quartz.CGDisplayBounds(display)
+            described.append(f'{int(bounds.size.width)} x {int(bounds.size.height)} at ({int(bounds.origin.x)}, {int(bounds.origin.y)}), '
+                             f'{Quartz.CGDisplayPixelsWide(display)} x {Quartz.CGDisplayPixelsHigh(display)} pixels')
+        return '; '.join(described)
+
+    add('System', lambda: f'macOS {host.mac_ver()[0]} on {host.machine()}')
+    add('Allowed to see the screen', screen_recording_allowed)
+    add('Allowed to press keys and click', accessibility_allowed)
+    add('Screens', screens)
+    add('Program in front (process id)', front_window)
+    try:
+        window = find_game_window()
+    except GameWindowNotFound as error:
+        lines.append(f'Game window: {error}')
+    except Exception as error:
+        lines.append(f'Game window: could not be looked for ({type(error).__name__}: {error})')
+    else:
+        add('Game window (process id, window number)', lambda: (window.pid, window.window_number))
+        add('Game window is in front', window.is_foreground)
+        add('Game picture area', window.capture_region)
+    return lines
+
+
 def front_window():
     """The program the person is using right now (its process id), so it can be handed back later."""
     return focused_pid() or frontmost_pid(_window_list(onscreen_only=True))

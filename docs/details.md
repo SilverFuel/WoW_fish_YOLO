@@ -92,6 +92,11 @@ python tools/check_launcher.py         the starter
 python tools/check_page.py             the page; needs Node.js with Playwright
 ```
 
+### Looking into a report
+
+`python tools/replay_report.py report.zip` runs the detector again over the pictures in a report made with the
+page's **Save a report**, and prints how sure it was about each one.
+
 ### The self-test for your own computer
 
 `python tools/desktop_probe.py` names the part that is not working when it cannot see, press or click on your

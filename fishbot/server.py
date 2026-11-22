@@ -275,6 +275,8 @@ class Handler(BaseHTTPRequestHandler):
                 if picture is None:
                     raise BadRequest(404, 'No picture yet.')
                 return self._send(200, picture, 'image/jpeg')
+            if url.path == '/api/report.zip':
+                return self._send(200, self.app.service.report_zip(), 'application/zip')
             if url.path == '/api/click.jpg':
                 number = parse_qs(url.query).get('id', [''])[0]
                 picture = self.app.service.click_jpeg(int(number)) if number.isdigit() else None

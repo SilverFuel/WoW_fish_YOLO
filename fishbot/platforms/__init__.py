@@ -11,6 +11,7 @@ Each platform module provides:
     create_grabber()     -> object with grab(region) returning BGR pixels
     front_window()       -> whatever the person has in front right now, as a value to hand back later
     bring_to_front(it)   -> bring that back to the front (best effort; the system may refuse)
+    facts()              -> plain sentences about the screens and the game window, for the report
 
 A window object has exists(), is_foreground(), focus() and capture_region(); the last returns
 {'left', 'top', 'width', 'height'} in screen coordinates, or None when there is nothing to capture.

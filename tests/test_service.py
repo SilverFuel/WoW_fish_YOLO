@@ -22,6 +22,9 @@ class DemoPlatform:
         self.missing_permissions = []
         self.brought_back = []
 
+    def facts(self):
+        return demo.facts()
+
     def front_window(self):
         return 'the page'
 
@@ -192,6 +195,34 @@ def test_a_normal_session_does_not_take_the_front_from_you(service, platform):
 
     assert platform.brought_back == []
     assert (service.snapshot()['test'], service.snapshot()['test_result']) == (False, '')
+
+
+def test_the_report_holds_the_last_casts_the_clicks_and_the_log(service, platform):
+    import io
+    import zipfile
+
+    service.start(test=True)
+    assert wait_for(lambda: not service.running, timeout=30)
+    service.wait(10)
+
+    archive = zipfile.ZipFile(io.BytesIO(service.report_zip()))
+    names = archive.namelist()
+    text = archive.read('report.txt').decode()
+
+    assert 'Pretend game: no real screen or game window is used.' in text
+    assert 'fishing_key: f' in text and 'Got a bite and clicked the bobber (1 so far).' in text
+    assert 'Cast 1:' in text and 'Sure enough to click at' in text
+    assert any(name.startswith('casts/cast-0001/') and name.endswith('.jpg') for name in names)
+    assert any(name.startswith('clicked/click-') for name in names) and 'last-picture.jpg' in names
+
+
+def test_a_report_can_be_made_before_anything_has_happened(service):
+    import io
+    import zipfile
+
+    text = zipfile.ZipFile(io.BytesIO(service.report_zip())).read('report.txt').decode()
+
+    assert 'No cast has been recorded yet.' in text and 'state: idle' in text
 
 
 def test_checking_the_game_hands_the_page_back(service, platform):

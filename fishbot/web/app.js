@@ -26,6 +26,7 @@ const CHAT_MESSAGE_CHARS = 4000;
 let state = null;
 let cursor = 0;
 let lastLogId = 0;
+let lastLogLine = '';
 let listening = null;
 let startProblems = [];
 let pictureTag = '';
@@ -158,6 +159,8 @@ function showStatus() {
   const [title, hint] = (waitingForMouse ? STATUS.waitingForMouse : testing ? STATUS.test : STATUS[state.state]) || STATUS.idle;
   const stoppedItself = !running && state.stopped_by_safeguard;
   let detail = hint;
+  // While it fishes, say what just happened: the last cast's outcome is what people want to know.
+  if (state.state === 'fishing' && !testing && lastLogLine) detail = lastLogLine;
   if (state.state === 'idle') {
     // A plain "Stopped." after you pressed Stop says nothing new; what to do next is more useful.
     if (state.message && state.message !== 'Stopped.') detail = state.message;
@@ -208,6 +211,7 @@ function addToLog(entries) {
   for (const entry of entries) {
     if (entry.id <= lastLogId) continue; // two refreshes can overlap and carry the same lines
     lastLogId = entry.id;
+    lastLogLine = entry.message;
     const item = document.createElement('li');
     item.className = entry.level;
     const time = document.createElement('time');
@@ -297,10 +301,10 @@ function show(next) {
   if (first) setUp(next);
 
   showSettings(next.settings);
+  addToLog(next.log); // first, so the main card can say what just happened
+  cursor = Math.max(cursor, next.log_cursor);
   showStatus();
   showGuide();
-  addToLog(next.log);
-  cursor = Math.max(cursor, next.log_cursor);
   showClicks(next.clicks);
 
   // The picture under "What it sees" follows a running session.
@@ -730,6 +734,31 @@ $('assistant-test').addEventListener('click', async () => {
     result.textContent = error.message;
   }
   button.disabled = false;
+});
+
+// ----- a report to send for help -----
+
+$('report').addEventListener('click', async () => {
+  const message = $('report-message');
+  try {
+    const response = await fetch('/api/report.zip', { headers: { 'X-Fishbot-Token': token } });
+    if (!response.ok) throw new Error('The report could not be made. Try again.');
+    const now = new Date();
+    const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      + `-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(await response.blob());
+    link.download = `wow-fish-yolo-report-${stamp}.zip`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+    message.textContent = `Saved as ${link.download}, normally in your Downloads folder. It holds small pictures of the game from `
+      + 'the last casts, what it clicked, what it has been doing and your settings.';
+  } catch (error) {
+    message.textContent = error.message;
+  }
+  message.hidden = false;
 });
 
 // ----- go -----

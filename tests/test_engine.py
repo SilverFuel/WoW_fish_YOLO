@@ -1,5 +1,8 @@
 """Tests for the fishing loop. They use stand-ins for the game, so they run on any system."""
 from dataclasses import replace
+from types import SimpleNamespace
+
+import pytest
 
 from fishbot import engine
 from fishbot.engine import FishingBot
@@ -494,6 +497,53 @@ def test_a_catch_resets_the_run_of_misses():
     assert game.bot.stats.casts == 6
     assert game.bot.stats.looted == 1
     assert game.bot.stats.missed == 5
+
+
+class SeesSomethingUnsure(FakeVision):
+    """Never sure enough to click, but each look has a score, as the real vision does."""
+
+    def __init__(self, clock, scores):
+        super().__init__(clock, lambda frame: None)
+        self.scores = scores
+        self.last = None
+
+    def find_splash(self, region):
+        result = super().find_splash(region)
+        score = self.scores[min(self.frames - 1, len(self.scores) - 1)]
+        self.last = SimpleNamespace(detection=SimpleNamespace(score=score), confident=False, note='')
+        return result
+
+
+@pytest.mark.parametrize('scores, expected', [
+    ([0.02, 0.64, 0.31], 'No bite on that cast. The closest thing it saw was 64% sure, and it needs 80%.'),
+    ([0.01, 0.03, 0.0], 'No bite on that cast. It saw nothing that looked like one.'),
+])
+def test_a_cast_with_no_click_says_how_sure_the_closest_look_was(scores, expected):
+    game = Game(settings=replace(BASE, stop_after_misses=1))
+    game.bot._vision = game.vision = SeesSomethingUnsure(game.clock, scores)
+    looks = []
+    game.bot._on_look = lambda cast, seconds, sighting: looks.append((cast, round(seconds, 2), sighting.detection.score))
+
+    game.bot.run()
+
+    assert expected in game.messages
+    assert looks[0][0] == 1 and looks[0][1] >= engine.SETTLE_AFTER_CAST_SEC
+    assert [score for _, _, score in looks[:3]] == scores
+
+
+def test_a_record_that_fails_is_dropped_and_fishing_goes_on():
+    game = Game(settings=replace(BASE, stop_after_misses=2))
+    game.bot._vision = game.vision = SeesSomethingUnsure(game.clock, [0.5])
+
+    def broken(cast, seconds, sighting):
+        raise OSError('disk full')
+
+    game.bot._on_look = broken
+
+    game.bot.run()
+
+    assert game.bot.stats.missed == 2
+    assert sum('Could not keep a record of that look (disk full).' in message for message in game.messages) == 1
 
 
 def test_stops_when_the_time_limit_is_reached():

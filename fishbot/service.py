@@ -11,7 +11,7 @@ import time
 import traceback
 from dataclasses import asdict, replace
 
-from fishbot import __version__, keys
+from fishbot import __version__, keys, report
 from fishbot.detector import DEFAULT_MODEL, SplashDetector
 from fishbot.engine import FishingBot, Stats
 from fishbot.platforms import GameWindowNotFound
@@ -51,6 +51,7 @@ class BotService:
         self._message = ''
         self._practice = False
         self._test, self._test_result = False, ''
+        self._recorder = report.CastRecorder()
         self._stopped_by_safeguard = False
         self._clicks = collections.deque(maxlen=CLICKS_KEPT)  # what was clicked, newest last
         self._click_id = 0
@@ -159,7 +160,7 @@ class BotService:
                             settings.confidence, settings.scan_area)
             bot = FishingBot(settings, window, vision, self._controls_once(), log=self.log,
                              on_click=lambda x, y, practised: self._remember_click(vision, x, y, practised),
-                             practice=practice)
+                             practice=practice, on_look=self._recorder.look)
             with self._lock:
                 self._bot, self._vision = bot, vision
                 self._starting = False
@@ -324,6 +325,26 @@ class BotService:
                 'width': region['width'], 'height': region['height'],
                 'best_score': round(sighting.detection.score, 3),
                 'inference_ms': round(self._detector.last_inference_ms)}
+
+    def report_zip(self):
+        """Everything needed to see why it does not work on this computer, as one ZIP file."""
+        try:
+            facts = list(self.platform.facts())
+        except Exception as error:
+            traceback.print_exc()
+            facts = [f'The facts about this computer could not be read ({type(error).__name__}: {error}).']
+
+        snapshot = self.snapshot()
+        with self._lock:
+            clicks = [(f'click-{click["id"]:03d}-{"practice-" if click["practice"] else ""}{round(click["score"] * 100)}pct',
+                       click['picture']) for click in self._clicks]
+            log = list(self._log)
+        state = {'state': snapshot['state'], 'message': snapshot['message'], 'practice': snapshot['practice'],
+                 'test cast': snapshot['test'], 'test cast result': snapshot['test_result'],
+                 'waiting for': snapshot['waiting_for'], 'stopped itself': snapshot['stopped_by_safeguard'],
+                 **{name: value for name, value in snapshot['stats'].items()}}
+        return report.build(__version__, facts, snapshot['settings'], state, log, self._recorder.casts(),
+                            clicks, self.preview_jpeg())
 
     def preview_jpeg(self):
         """The most recent look at the game as a JPEG, or None if there has not been one."""

@@ -20,7 +20,8 @@ You run it from one simple page in your browser, on Windows or Mac.
 The first time, it sets itself up. That takes a few minutes. Then the page opens in your browser.
 Leave the small text window open while you fish. Double-clicking the starter again just brings the page back.
 
-If your computer will not open the starter, see [Help](docs/help.md).
+If your computer will not open the starter, see [Help](docs/help.md). If it runs but does not do what it should,
+press **Save a report** at the bottom of the page: that one file shows what it saw.
 
 ## On the page
 

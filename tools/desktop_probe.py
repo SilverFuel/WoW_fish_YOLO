@@ -219,6 +219,12 @@ def main():
         return (f'me={os.getpid()} window-order={platform.frontmost_pid(listed)} keyboard-focus={platform.focused_pid()} '
                 f'workspace={workspace.processIdentifier() if workspace is not None else None} top={top}')
 
+    @check('facts about this computer for the report')
+    def _():
+        facts = platform.facts()
+        unread = [fact for fact in facts if 'could not be' in fact]
+        return bool(facts) and not unread, ' | '.join(facts)
+
     @check('permissions and focus as the system reports them')
     def _():
         if platform.SYSTEM != 'macos':

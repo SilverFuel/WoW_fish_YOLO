@@ -58,6 +58,20 @@ A few things are different on a Mac:
 
 ## While fishing
 
+**It casts, but it never clicks the bobber.** Look at the line under the big word at the top of the page, or
+open **What it has been doing**. After each cast it says why it did not click:
+
+- *"It saw nothing that looked like one"*: it is not seeing your bobber's splash at all. Press **Check my
+  game**: the picture has to show your game zoomed all the way in, with no buttons or bars. If you chose
+  **Watch the middle** or **Watch a small middle**, go back to **Watch the whole game**.
+- *"The closest thing it saw was 64% sure, and it needs 80%"*: it sees the splash but is not sure enough. Open
+  **More options** and lower **How sure it must be** to just under the number it reports.
+- *"Ignored something that looked like a bite"*: it was sure, but one of its safety rules held it back, and it
+  says which.
+
+If none of that explains it, press **Save a report** at the bottom of the page and send that file to whoever
+is helping you. It holds small pictures of the game from the last casts, so they can see exactly what it saw.
+
 **The page did not come back after a check or a test cast.** Your computer did not allow it that time. Switch
 back to your browser yourself; the result is waiting there.
 

@@ -123,6 +123,7 @@ const errorFor = (page, name) => waitFor(page, (n) => document.querySelector(`[d
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.click('#start');
   check(await waitText(page, '#status-title', 'Fishing', 15000), 'Start leads to Fishing');
+  check(await waitFor(page, () => /^Cast \d+\. Waiting for a bite/.test(document.querySelector('#status-detail').innerText), null, 10000), 'the main card says what it is doing right now', await text(page, '#status-detail'));
   check(await page.locator('#stop').isVisible() && await page.locator('#pause').isVisible() && await page.locator('#start').isHidden() && await page.locator('#practice-line').isHidden(), 'Pause and Stop take the place of Start');
   check(await page.evaluate(() => document.querySelector('#setup').disabled && document.querySelector('#more-settings').disabled) && await page.locator('#setup-locked').isVisible(), 'set-up is locked while it fishes');
   check(await waitFor(page, () => !document.querySelector('#live-block').hidden && document.querySelector('#preview').naturalWidth > 0, null, 15000), 'What it sees shows the live picture while it fishes');
@@ -257,6 +258,11 @@ const errorFor = (page, name) => waitFor(page, (n) => document.querySelector(`[d
   const overflow = await phonePage.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   check(overflow <= 0, 'nothing runs off the side on a phone-sized screen', `overflow ${overflow}px`);
   await picture(phonePage, '05-phone.png');
+
+  // ---- a report to send for help ----
+  const [download] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }), page.click('#report')]);
+  check(/^wow-fish-yolo-report-\d{4}-\d{2}-\d{2}-\d{4}\.zip$/.test(download.suggestedFilename()), 'Save a report hands you one file', download.suggestedFilename());
+  check(await waitFor(page, () => document.querySelector('#report-message').innerText.includes('Downloads folder')), 'and says where it went and what is in it', await text(page, '#report-message'));
 
   // ---- a stranger cannot use it; Quit quits ----
   const stranger = await context.newPage();

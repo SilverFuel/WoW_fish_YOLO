@@ -230,6 +230,14 @@ def test_assistant_chat_is_refused_while_switched_off(app):
     assert result == {'error': 'Turn the assistant on first.'}
 
 
+def test_the_report_is_a_zip_and_needs_the_pages_key(app):
+    response, payload = call(app, 'GET', '/api/report.zip')
+    assert response.status == 200 and response.getheader('Content-Type') == 'application/zip'
+    assert payload[:2] == b'PK'
+
+    assert call(app, 'GET', '/api/report.zip', token=False)[0].status == 403
+
+
 def test_quit_answers_before_the_app_closes(app):
     # Closing first can end the app before the answer is out, and the page then sees a cut-off reply.
     assert app.api_post('/api/quit', {}) == {}

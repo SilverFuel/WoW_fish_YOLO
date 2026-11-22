@@ -85,7 +85,7 @@ class FishingBot:
     """
 
     def __init__(self, settings, window, vision, controls, clock=time.monotonic, idle=time.sleep, log=print,
-                 on_click=None, practice=False):
+                 on_click=None, practice=False, on_look=None):
         self._settings = settings
         self._practice = practice  # watch only: nothing is pressed or clicked
         self._window = window
@@ -95,6 +95,8 @@ class FishingBot:
         self._idle = idle
         self._log = log
         self._on_click = on_click
+        self._on_look = on_look          # called with (cast number, seconds since the cast, what was seen)
+        self._best_this_cast = None      # how sure the surest look of the current cast was
         self._stop = threading.Event()
         self._stop_lock = threading.Lock()
         self._paused = threading.Event()
@@ -184,7 +186,7 @@ class FishingBot:
                 self.stats.missed += 1
                 self.stats.misses_in_a_row += 1
                 self._fast_in_a_row = 0
-                self._log('No bite on that cast.')
+                self._log(self._why_no_bite())
 
             self._sleep(random.randrange(0, 3))
 
@@ -206,6 +208,7 @@ class FishingBot:
             position = self._vision.find_splash(region)
             if self._screen_is_blank():
                 break
+            self._note_look(self.elapsed_seconds())
             if position is not None:
                 self.stats.practice_clicks += 1
                 self._record_click(*position, practice=True)
@@ -423,6 +426,7 @@ class FishingBot:
         frame_interval = 1 / self._settings.checks_per_second
         deadline = cast_started + self._settings.cast_seconds
         mentioned_ignored = False
+        self._best_this_cast = None
         self._sleep(SETTLE_AFTER_CAST_SEC)
 
         while self._clock() < deadline:
@@ -442,6 +446,7 @@ class FishingBot:
             position = self._vision.find_splash(region)
             if self._screen_is_blank():
                 return CastResult.INTERRUPTED
+            self._note_look(self._clock() - cast_started)
 
             ignored = getattr(getattr(self._vision, 'last', None), 'note', '')
             if ignored and not mentioned_ignored:
@@ -458,6 +463,32 @@ class FishingBot:
             self._sleep(frame_interval - (self._clock() - frame_started))
 
         return CastResult.MISSED
+
+    def _note_look(self, seconds_since_cast):
+        """Remember how sure the surest look of this cast was, and pass the look on for the report."""
+        sighting = getattr(self._vision, 'last', None)
+        score = getattr(getattr(sighting, 'detection', None), 'score', None)
+        if score is None:
+            return
+        if self._best_this_cast is None or score > self._best_this_cast:
+            self._best_this_cast = score
+        if self._on_look is not None:
+            try:
+                self._on_look(self.stats.casts, seconds_since_cast, sighting)
+            except Exception as error:  # keeping a record must never get in the way of fishing
+                self._log(f'Could not keep a record of that look ({error}).')
+                self._on_look = None
+
+    def _why_no_bite(self):
+        """The line for a cast that ended without a click, with the reason when there is one to give."""
+        if self._best_this_cast is None:
+            return 'No bite on that cast.'
+        sure, needed = round(self._best_this_cast * 100), round(self._settings.confidence * 100)
+        if sure >= needed:
+            return 'No bite on that cast.'  # it was sure enough and held back for a reason it already gave
+        if sure < 5:
+            return 'No bite on that cast. It saw nothing that looked like one.'
+        return f'No bite on that cast. The closest thing it saw was {sure}% sure, and it needs {needed}%.'
 
     # Right click on the bobber to loot the fish, player must enable automatic looting
     def _loot(self, x, y, region):

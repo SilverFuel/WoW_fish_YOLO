@@ -171,6 +171,68 @@ def bring_to_front(hwnd):
         pass
 
 
+def _describe(hwnd):
+    if not hwnd:
+        return 'none'
+    return f'"{win32gui.GetWindowText(hwnd)}" (kind {win32gui.GetClassName(hwnd)}, program {_process_name(hwnd)})'
+
+
+def _scaling_mode():
+    mode = ctypes.c_int(-1)
+    ctypes.windll.shcore.GetProcessDpiAwareness(0, ctypes.byref(mode))
+    return {0: 'scaled by Windows (positions are not real pixels)', 1: 'real pixels on the main screen only',
+            2: 'real pixels on every screen'}.get(mode.value, f'unknown ({mode.value})')
+
+
+def _screens():
+    screens = []
+    for handle, _, _ in win32api.EnumDisplayMonitors():
+        info = win32api.GetMonitorInfo(handle)
+        left, top, right, bottom = info['Monitor']
+        dots_x, dots_y = ctypes.c_uint(0), ctypes.c_uint(0)
+        try:
+            ctypes.windll.shcore.GetDpiForMonitor(int(handle), 0, ctypes.byref(dots_x), ctypes.byref(dots_y))
+            scaling = f'{round(dots_x.value / 96 * 100)}%'
+        except (AttributeError, OSError, TypeError, ValueError):
+            scaling = 'unknown'
+        screens.append(f'{right - left} x {bottom - top} at ({left}, {top}), scaling {scaling}'
+                       f'{", main screen" if info.get("Flags", 0) & 1 else ""}')
+    return '; '.join(screens)
+
+
+def facts():
+    """Plain facts about this computer's screens and the game window, for the report. Never raises."""
+    import platform as host
+
+    lines = []
+
+    def add(name, read):
+        try:
+            lines.append(f'{name}: {read()}')
+        except Exception as error:  # a fact that cannot be read is itself worth knowing
+            lines.append(f'{name}: could not be read ({type(error).__name__}: {error})')
+
+    add('System', host.platform)
+    add('Started as administrator', lambda: bool(ctypes.windll.shell32.IsUserAnAdmin()))
+    add('How this app measures the screen', _scaling_mode)
+    add('Screens', _screens)
+    add('Mouse pointer at', win32api.GetCursorPos)
+    add('Window in front', lambda: _describe(win32gui.GetForegroundWindow()))
+    try:
+        window = find_game_window()
+    except GameWindowNotFound as error:
+        lines.append(f'Game window: {error}')
+    except Exception as error:
+        lines.append(f'Game window: could not be looked for ({type(error).__name__}: {error})')
+    else:
+        add('Game window', lambda: _describe(window.hwnd))
+        add('Game window is in front', window.is_foreground)
+        add('Game window is minimised', lambda: bool(win32gui.IsIconic(window.hwnd)))
+        add('Game window outline (left, top, right, bottom)', lambda: win32gui.GetWindowRect(window.hwnd))
+        add('Game picture area', window.capture_region)
+    return lines
+
+
 def key_is_down(name):
     return bool(win32api.GetAsyncKeyState(keys.WINDOWS_VK[name]) & 0x8000)
 

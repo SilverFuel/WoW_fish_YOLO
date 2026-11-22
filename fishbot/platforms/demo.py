@@ -132,6 +132,10 @@ def find_game_window():
     return DemoWindow()
 
 
+def facts():
+    return ['Pretend game: no real screen or game window is used.']
+
+
 def front_window():
     return None  # the pretend game never takes the front, so there is nothing to hand back
 

@@ -30,7 +30,7 @@ STANDS_OUT_BY = 1.8           # times the strongest lasting difference anywhere 
 THING_STANDS_OUT = 4.0        # levels by which a spot has to differ from the water around it to be a thing
 THING_SHARE_OF_BEFORE = 0.35  # and this share of how much it stood out before the cast, if something was there then
 WATCH_SPAN = 0.07             # half the side of the watched square around the bobber, as a share of the width
-CALM_LOOKS = 4                # looks at the floating bobber before a burst can be judged
+CALM_LOOKS = 3                # looks at the floating bobber before a burst can be judged; a bite sooner than that is missed
 # A bite is a burst of movement at the bobber. Against how much the spot moves while the bobber floats:
 BURST_RISE = 6.0              # it rises by at least this much (levels, mean of the busiest fifth of the spot),
 BURST_RISE_SPREADS = 5.0      # and by this many times the usual variation of the floating movement,

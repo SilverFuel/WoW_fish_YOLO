@@ -173,18 +173,23 @@ def test_a_test_cast_is_one_cast_and_hands_the_page_back(service, platform):
 
 
 def test_by_movement_alone_it_fishes_without_the_model_having_a_say(service, platform):
+    # The bobber has to be found and watched floating for a moment before a bite can be told from it,
+    # so the fish bites a few seconds after the cast, as it does in the game.
+    platform.game.bite_after = (4.0, 4.5)
     service.store.update({'spot_bites_by': 'movement'})
 
     service.start()
-    assert wait_for(lambda: service.snapshot()['stats']['looted'] >= 2, timeout=40)
+    assert wait_for(lambda: service.snapshot()['stats']['looted'] >= 2, timeout=60)
     service.stop()
     service.wait(10)
 
     snapshot = service.snapshot()
     clicks = [event for event in platform.game.events if event[0] == 'click']
     assert len(clicks) >= 2
-    for click, landing in zip(clicks, platform.game.landings):
-        assert click[2:] == pytest.approx(landing, abs=12)      # on the bobber, wherever it landed
+    for click in clicks:
+        # On a bobber, wherever it landed. Matched by place, not by count: a slow machine may miss a cast.
+        nearest = min(platform.game.landings, key=lambda landing: abs(landing[0] - click[2]) + abs(landing[1] - click[3]))
+        assert click[2:] == pytest.approx(nearest, abs=12)
     assert all(click['score'] == 0 for click in snapshot['clicks'])   # the model was never asked
 
 

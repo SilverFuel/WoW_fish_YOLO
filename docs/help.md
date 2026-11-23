@@ -80,7 +80,8 @@ water and the spray look different, and it often does not recognise a Classic bi
 spots a bite by movement: after each cast it finds your bobber, shown as a white box under **What it sees**,
 and watches it for the jolt of a bite. Both ways run together unless you choose otherwise under **More
 options**, **How it spots a bite**. A cast lasts longer in Classic, and it waits for as long as it can still
-see your bobber floating.
+see your bobber floating. By movement it needs to see the bobber float for a moment first, so a bite in the
+first two or three seconds after the cast is missed.
 
 **The page did not come back after a check or a test cast.** Your computer did not allow it that time. Switch
 back to your browser yourself; the result is waiting there.

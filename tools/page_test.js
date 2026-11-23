@@ -87,6 +87,8 @@ const errorFor = (page, name) => waitFor(page, (n) => document.querySelector(`[d
   await page.uncheck('#lure_enabled');
 
   // ---- more options ----
+  check(await page.locator('input[name="spot_bites_by"][value="both"]').isChecked(), 'a bite is spotted both ways unless you choose otherwise');
+  await page.locator('input[name="spot_bites_by"][value="movement"]').check({ force: true });   // the test cast below goes by movement alone
   await page.locator('input[name="scan_area"][value="center75"]').check({ force: true });
   await page.waitForTimeout(600);
   let now = (await saved(page)).settings;
@@ -110,6 +112,7 @@ const errorFor = (page, name) => waitFor(page, (n) => document.querySelector(`[d
   check(await waitFor(page, () => !document.querySelector('#cast-result').hidden && document.querySelector('#cast-picture').naturalWidth > 0, null, 40000), 'it comes back with a picture of what it clicked');
   const afterTest = await saved(page);
   check(afterTest.stats.casts === 1 && afterTest.stats.looted === 1 && afterTest.running === false && afterTest.settings.stop_after_catches === 0, 'it was exactly one cast, and your own limits are untouched', JSON.stringify({ casts: afterTest.stats.casts, caught: afterTest.stats.looted }));
+  check(afterTest.settings.spot_bites_by === 'movement' && afterTest.clicks[0].score === 0, 'by movement alone it found the bobber and the bite, without the trained model', JSON.stringify({ by: afterTest.settings.spot_bites_by, modelScore: afterTest.clicks[0].score }));
   check((await text(page, '#status-detail')) === 'The test cast is done.' && await page.locator('#recovery').isHidden(), 'the page says the test cast is done, without an alarm');
   await picture(page, '01b-test-cast.png');
   await page.click('#cast-no');
@@ -118,6 +121,10 @@ const errorFor = (page, name) => waitFor(page, (n) => document.querySelector(`[d
   check(await page.locator('#guide-done').isVisible() && (await text(page, '#guide-done')).includes('Start fishing'), 'Yes finishes set-up and points at Start fishing');
   await page.reload();
   check(await waitText(page, '#status-title', 'Ready') && await waitFor(page, () => !document.querySelector('#guide-done').hidden && document.querySelector('#look-body').hidden), 'set-up stays finished when the page is opened again');
+  await page.click('#more > summary');
+  await page.locator('input[name="spot_bites_by"][value="both"]').check({ force: true });        // back to both ways for the rest
+  await page.waitForTimeout(600);
+  await page.click('#more > summary');
 
   // ---- fishing ----
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -168,7 +175,9 @@ const errorFor = (page, name) => waitFor(page, (n) => document.querySelector(`[d
 
   // ---- it stops on its own and says what to do ----
   await page.click('#more > summary');
-  await page.fill('#confidence', '95'); await page.press('#confidence', 'Tab');   // the pretend bite is 90% sure, so nothing counts
+  // By its look alone and needing 95%, nothing counts: the pretend bite only looks 90% like one.
+  await page.locator('input[name="spot_bites_by"][value="look"]').check({ force: true });
+  await page.fill('#confidence', '95'); await page.press('#confidence', 'Tab');
   await page.fill('#cast_seconds', '5'); await page.press('#cast_seconds', 'Tab');
   await page.fill('#stop_after_misses', '1'); await page.press('#stop_after_misses', 'Tab');
   await page.waitForTimeout(600);
@@ -185,6 +194,7 @@ const errorFor = (page, name) => waitFor(page, (n) => document.querySelector(`[d
   await picture(page, '03-stopped-itself.png');
   await page.click('#more > summary');
   await page.fill('#confidence', '80'); await page.press('#confidence', 'Tab');
+  await page.locator('input[name="spot_bites_by"][value="both"]').check({ force: true });
   await page.fill('#cast_seconds', '20'); await page.press('#cast_seconds', 'Tab');
   await page.fill('#stop_after_misses', '5'); await page.press('#stop_after_misses', 'Tab');
   await page.waitForTimeout(600);

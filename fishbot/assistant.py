@@ -36,6 +36,8 @@ SUGGESTABLE = {
     'cast_seconds': 'how long to wait for a bite before casting again (default 20)',
     'confidence': 'how sure the detector must be, as a fraction (default 0.8)',
     'scan_area': '"full" (whole window, most reliable), "center75" (about a third less CPU) or "center50" (about 60% less)',
+    'spot_bites_by': '"both" (default), "movement" (finds the bobber after the cast and watches it for the burst of a bite; '
+                     'works in Classic, where the trained model often does not) or "look" (the trained model only)',
     'checks_per_second': 'how often it looks for the splash (default 5)',
     'cpu_threads': 'CPU threads for the detector (default 2)',
     'stop_after_minutes': 'stop after this many minutes, 0 = no limit',
@@ -52,8 +54,11 @@ You help the user set the bot up and fix problems. You cannot see the screen or 
 You can only answer and suggest setting changes; the user decides whether to apply them.
 
 How the bot works:
-- It presses the fishing key, then looks at the game window a few times a second with a small vision model.
-  When it sees the bobber splash it right-clicks the bobber. Auto Loot must be on in the game.
+- It presses the fishing key, then looks at the game window a few times a second. When it spots a bite it
+  right-clicks the bobber. Auto Loot must be on in the game.
+- It spots a bite two ways (setting spot_bites_by): by its look, with a small vision model trained on the
+  Cataclysm version, which often fails in Classic; and by movement, where it finds the bobber after the cast
+  and watches that spot for the burst of a bite. "How sure it must be" (confidence) only applies to the look.
 - It only sends keys and clicks while the game is the window in front.
 - The model was trained in first-person view with the game interface hidden (Alt+Z).
 - The page has three set-up steps: pick the fishing key, "Check my game" (shows what the bot sees) and

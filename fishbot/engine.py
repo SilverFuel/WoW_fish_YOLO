@@ -28,6 +28,12 @@ POINTER_MOVED_PX = 8          # the mouse counts as still while it stays within 
 # the game window's width, whichever is more. The click goes to the bite itself, so a small drift is harmless.
 TOOK_THE_MOUSE_PX = 40
 TOOK_THE_MOUSE_SHARE = 0.03
+# To spot a bite by movement, the water is looked at a few times just before each cast.
+PICTURES_BEFORE_CAST = 3
+BEFORE_CAST_GAP_SEC = 0.15
+# In some versions of the game the bobber floats longer than the wait that was set. While it can
+# be seen still floating, the cast is given this much longer before casting again.
+LONGEST_EXTRA_WAIT_SEC = 15.0
 # After the bot pauses itself, a press of the pause key within this time means "pause", not "resume".
 KEEP_OWN_PAUSE_SEC = 5.0
 # A bite this soon after casting, this many times running, is not fishing: something on screen
@@ -249,7 +255,10 @@ class FishingBot:
             what = 'no bite on the last cast' if misses == 1 else f'no bite in {misses} casts in a row'
             advice = ('Check that the fishing key is right, and that the game is zoomed all the way in '
                       'with the buttons and bars hidden.')
-            if 'closest thing' in self.why_no_bite:
+            if 'could not find your bobber' in self.why_no_bite:
+                advice = (f'{self.why_no_bite} The bobber has to land in the picture, on open water: zoom all the '
+                          'way in, face the water and hide the buttons and bars.')
+            elif 'closest thing' in self.why_no_bite and 'watched your bobber' not in self.why_no_bite:
                 advice = (f'{self.why_no_bite} If it keeps coming that close, lower "How sure it must be" '
                           'under More options.')
             elif self.why_no_bite:
@@ -451,9 +460,30 @@ class FishingBot:
             self._log(f'Put on a lure. The next one is due in {settings.lure_minutes} minutes.')
             self._sleep(LURE_APPLY_WAIT_SEC)
 
+    def _look_before_cast(self):
+        """Let the vision see the water as it is before the bobber lands, if it wants to."""
+        before_cast = getattr(self._vision, 'before_cast', None)
+        if before_cast is None:
+            return
+        for picture in range(PICTURES_BEFORE_CAST):
+            region = self._window.capture_region() if self._can_act() else None
+            if region is None:
+                return
+            sighting = before_cast(region)
+            if sighting is not None:
+                # For the report: these belong to the cast that is about to be made, before its start.
+                self._pass_on_look(self.stats.casts + 1, (picture - PICTURES_BEFORE_CAST) * BEFORE_CAST_GAP_SEC, sighting)
+            self._sleep(BEFORE_CAST_GAP_SEC)
+
     def _cast(self):
-        if self._recasting_too_often() or not self._press(self._settings.fishing_key):
+        if self._recasting_too_often():
             return CastResult.INTERRUPTED
+        self._look_before_cast()
+        if not self._press(self._settings.fishing_key):
+            return CastResult.INTERRUPTED
+        cast_made = getattr(self._vision, 'cast_started', None)
+        if cast_made is not None:
+            cast_made()
 
         cast_started = self._clock()
         self._cast_times.append(cast_started)
@@ -466,7 +496,7 @@ class FishingBot:
         self._best_this_cast = None
         self._sleep(SETTLE_AFTER_CAST_SEC)
 
-        while self._clock() < deadline:
+        while self._clock() < deadline or self._bobber_still_out(deadline):
             frame_started = self._clock()
             if self._user_took_the_mouse():
                 return CastResult.INTERRUPTED
@@ -490,6 +520,9 @@ class FishingBot:
                 return CastResult.INTERRUPTED
             self._note_look(self._clock() - cast_started)
 
+            if getattr(self._vision, 'cast_is_over', False):
+                break  # the bobber has been pulled in, so nothing can bite on this cast any more
+
             ignored = getattr(getattr(self._vision, 'last', None), 'note', '')
             if ignored and not mentioned_ignored:
                 self._log(f'Ignored something that looked like a bite ({ignored}).')
@@ -506,6 +539,11 @@ class FishingBot:
 
         return CastResult.MISSED
 
+    def _bobber_still_out(self, deadline):
+        """Past the wait that was set: is the bobber still floating, so that a bite can still come?"""
+        return (self._clock() < deadline + LONGEST_EXTRA_WAIT_SEC
+                and bool(getattr(self._vision, 'bobber_still_out', False)))
+
     def _note_look(self, seconds_since_cast):
         """Remember how sure the surest look of this cast was, and pass the look on for the report."""
         sighting = getattr(self._vision, 'last', None)
@@ -514,17 +552,25 @@ class FishingBot:
             return
         if self._best_this_cast is None or score > self._best_this_cast:
             self._best_this_cast = score
-        if self._on_look is not None:
-            try:
-                self._on_look(self.stats.casts, seconds_since_cast, sighting)
-            except Exception as error:  # keeping a record must never get in the way of fishing
-                self._log(f'Could not keep a record of that look ({error}).')
-                self._on_look = None
+        self._pass_on_look(self.stats.casts, seconds_since_cast, sighting)
+
+    def _pass_on_look(self, cast, seconds, sighting):
+        if self._on_look is None:
+            return
+        try:
+            self._on_look(cast, seconds, sighting)
+        except Exception as error:  # keeping a record must never get in the way of fishing
+            self._log(f'Could not keep a record of that look ({error}).')
+            self._on_look = None
 
     def _why_no_bite(self):
         """The line for a cast that ended without a click, with the reason when there is one to give."""
         self.why_no_bite = ''
-        if self._best_this_cast is not None:
+        explain = getattr(self._vision, 'why_no_bite', None)
+        if explain is not None:
+            # The vision knows both ways it looked: by the splash's look and by the bobber's movement.
+            self.why_no_bite = explain(self._best_this_cast)
+        elif self._best_this_cast is not None:
             sure, needed = round(self._best_this_cast * 100), round(self._settings.confidence * 100)
             if sure < 5:
                 self.why_no_bite = 'It saw nothing that looked like one.'

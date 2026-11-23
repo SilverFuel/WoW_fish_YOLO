@@ -1,6 +1,6 @@
 # WoW Fish YOLO
 
-A fishing helper for World of Warcraft. It watches the game for the bobber splash and clicks it for you.
+A fishing helper for World of Warcraft. It watches your bobber for a bite and clicks it for you.
 You run it from one simple page in your browser, on Windows or Mac.
 
 > Using a bot is against Blizzard's rules and can get an account closed. Use it at your own risk.

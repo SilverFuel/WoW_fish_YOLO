@@ -4,10 +4,20 @@ For the curious. You do not need any of this to use it.
 
 ## How it works
 
-A small vision model looks at a picture of the game window a few times a second. When it sees the bobber splash,
-the bot right-clicks it, and the game's Auto Loot does the rest. Then it casts again with your fishing key. The
-model was trained by the original author on 2800 screenshots from the Cataclysm version of the game, in
-first-person view with the interface hidden, which is why the page asks you to set the game up that way.
+It looks at a picture of the game window a few times a second. When it spots a bite it right-clicks the
+bobber, and the game's Auto Loot does the rest. Then it casts again with your fishing key.
+
+It spots a bite in two ways, and acts on whichever comes first:
+
+- **By its look.** A small vision model recognises the spray. The original author trained it on 2800
+  screenshots from the Cataclysm version of the game, in first-person view with the interface hidden, which is
+  why the page asks you to set the game up that way. In versions where the water looks different, such as
+  Classic, it often does not recognise a bite.
+- **By movement.** It takes a few pictures of the water just before the cast. After the cast, the bobber is the
+  one thing that was not there before and stays, so that is how it is found; colour helps to tell it from
+  ripples. Then it watches that one spot. Floating, a bobber hardly moves; a bite is a short, strong burst of
+  movement there and nowhere else. A bobber that vanishes instead was pulled in, and the cast is over. None
+  of this depends on what a bobber or a splash looks like.
 
 The page is served by the bot itself, on your own computer only (`127.0.0.1`). Nothing is sent to the internet.
 
@@ -60,13 +70,16 @@ Checked for every change, on machines provided by GitHub. If any of these fails,
   the mouse pauses it, and that the front is handed back to the window you were in. It gets one more try if it fails, because a shared machine's desktop is sometimes slow.
 - **The page**, on Linux. `tools/check_page.py` opens it in a real browser against the pretend game and uses it
   the way a person would: about 60 checks.
-- **The test suite**, about 260 tests, on Windows, Mac and Linux, with Python 3.11 and 3.13.
+- **The test suite**, about 330 tests, on Windows, Mac and Linux, with Python 3.11 and 3.13.
 
 Checked once, by hand: the ONNX model gives the same answers as the original PyTorch model (scores within
 0.00002).
 
 Not tested:
 
+- **Spotting a bite by movement in the real game.** It was built and tested against a moving scene made from
+  the one real screenshot (`tests/lake.py`): rippling water, a bobber that lands, bobs, dips and sprays, other
+  anglers, a bobber pulled in with no fish. That movement is made up. Nobody has measured the real game's.
 - **The game itself.** It cannot run on a build machine, so every check uses a test window or the pretend game.
   Do the three set-up steps on the page first, then a short run while you watch.
 - **Double-clicking a downloaded copy.** The checks run the starter from a command line. The warnings Windows
@@ -111,7 +124,7 @@ leaves it alone and skips that check.
 | `Start on Windows.bat`, `Start on Mac.command` | The starters |
 | `bot.py` | Where it begins |
 | `fishbot/engine.py` | The fishing loop and its safeguards |
-| `fishbot/detector.py`, `fishbot/vision.py` | Seeing the splash |
+| `fishbot/detector.py`, `fishbot/motion.py`, `fishbot/vision.py` | Spotting a bite: by its look, by movement, and the two together |
 | `fishbot/platforms/` | The Windows, Mac and pretend-game parts |
 | `fishbot/service.py`, `fishbot/server.py`, `fishbot/web/` | The page |
 | `fishbot/assistant.py` | The optional assistant |

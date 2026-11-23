@@ -19,6 +19,7 @@ import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 
 from fishbot.detector import SplashDetector  # noqa: E402
+from fishbot.motion import BobberWatcher  # noqa: E402
 
 SUREST_SAVED = 6
 
@@ -40,15 +41,29 @@ def main():
         looks = json.loads(archive.read(f'casts/{cast}/looks.json'))
         pictures = sorted(name for name in archive.namelist() if name.startswith(f'casts/{cast}/') and name.endswith('.jpg'))
         print(f'\n{cast}: {len(pictures)} pictures')
-        print('  seconds   then    now   box now (x1, y1, x2, y2)        size now     held back')
+        print('  seconds   look: then    now   box now (x1, y1, x2, y2)       | movement: then           now                 held back')
         replayed = []
+        watcher, cast_made = BobberWatcher(), False
         for look, name in zip(looks, pictures):
             frame = cv2.imdecode(np.frombuffer(archive.read(name), dtype=np.uint8), cv2.IMREAD_COLOR)
             found = detector.detect(frame)
             replayed.append((found.score, look, name, frame, found))
-            print(f'  {look["seconds"]:7.2f}  {look["score"] * 100:5.1f}%  {found.score * 100:5.1f}%  '
-                  f'({found.x1:6.1f}, {found.y1:6.1f}, {found.x2:6.1f}, {found.y2:6.1f})  '
-                  f'{found.x2 - found.x1:5.1f} x {found.y2 - found.y1:5.1f}  {look["held_back_because"]}')
+
+            # The bobber watcher again, fed the same way: pictures from before the cast first.
+            if look['seconds'] < 0:
+                watcher.before_cast(frame)
+                now = 'before the cast'
+            else:
+                if not cast_made:
+                    watcher.cast_started()
+                    cast_made = True
+                movement = watcher.look(frame, look['seconds'])
+                where = '' if movement.bobber is None else f' bobber at ({movement.bobber[0]:.0f}, {movement.bobber[1]:.0f})'
+                now = f'{movement.phase} {movement.strength * 100:4.0f}%{" BITE" if movement.bite else ""}{where}'
+            then = look.get('movement')
+            then = '-' if then is None else f'{then["phase"]} {then["share_of_a_bite"] * 100:4.0f}%{" BITE" if then["bite"] else ""}'
+            print(f'  {look["seconds"]:7.2f}  {look["score"] * 100:9.1f}%  {found.score * 100:5.1f}%  '
+                  f'({found.x1:6.1f}, {found.y1:6.1f}, {found.x2:6.1f}, {found.y2:6.1f}) | {then:18s} {now:34s} {look["held_back_because"]}')
 
         if out is not None:
             for score, look, name, frame, found in sorted(replayed, key=lambda item: -item[0])[:SUREST_SAVED]:

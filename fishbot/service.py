@@ -157,7 +157,9 @@ class BotService:
         finished = threading.Event()
         try:
             vision = Vision(self._detector_for(settings.cpu_threads), self._grabber,
-                            settings.confidence, settings.scan_area)
+                            settings.confidence, settings.scan_area,
+                            # Practice has no cast of its own to find a bobber after, so it goes by look only.
+                            spot_bites_by='look' if practice else settings.spot_bites_by)
             bot = FishingBot(settings, window, vision, self._controls_once(), log=self.log,
                              on_click=lambda x, y, practised: self._remember_click(vision, x, y, practised),
                              practice=practice, on_look=self._recorder.look, stop_if_mouse_moves=self._test)

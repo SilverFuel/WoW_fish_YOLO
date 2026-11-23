@@ -28,6 +28,7 @@ class Settings:
     cast_seconds: int = 20
     confidence: float = 0.8
     scan_area: str = 'full'
+    spot_bites_by: str = 'both'
     checks_per_second: int = 5
     cpu_threads: int = 2
     stop_after_minutes: int = 0
@@ -42,6 +43,10 @@ class Settings:
         return asdict(self)
 
 
+# How a bite is spotted: by the splash's look (the trained model), by the bobber's movement, or by
+# either, whichever comes first.
+SPOT_BITES_BY = ('both', 'movement', 'look')
+
 SAVE_ATTEMPTS = 6
 
 # Stored as a fraction, typed and shown as a percentage.
@@ -54,7 +59,7 @@ RANGES = {'lure_minutes': (1, 240), 'cast_seconds': (5, 60), 'confidence': (0.5,
 
 LABELS = {'fishing_key': 'Fishing key', 'lure_key': 'Lure key', 'lure_minutes': 'How long a lure lasts',
           'pause_hotkey': 'Pause key', 'stop_hotkey': 'Stop key', 'cast_seconds': 'Wait for a bite',
-          'confidence': 'How sure it must be', 'scan_area': 'How much of the game it watches',
+          'confidence': 'How sure it must be', 'scan_area': 'How much of the game it watches', 'spot_bites_by': 'How it spots a bite',
           'checks_per_second': 'Looks per second', 'cpu_threads': 'How much of the processor it uses',
           'stop_after_minutes': 'Stop after this many minutes', 'stop_after_catches': 'Stop after this many catches', 'stop_after_misses': 'Stop after casts in a row with no bite',
           'assistant_url': 'Where the assistant runs',
@@ -108,6 +113,9 @@ def _check_text(name, value, system):
     elif name == 'scan_area':
         if value not in SCAN_AREAS:
             raise ValueError('must be full, center75 or center50')
+    elif name == 'spot_bites_by':
+        if value not in SPOT_BITES_BY:
+            raise ValueError('must be both, movement or look')
     elif name == 'assistant_url':
         problem = ValueError('must be a web address such as http://localhost:11434/v1')
         if any(character.isspace() for character in value) or len(value) > 300:

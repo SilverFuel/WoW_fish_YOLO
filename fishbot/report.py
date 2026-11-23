@@ -19,11 +19,11 @@ import zipfile
 import cv2
 
 RECORDED_CASTS = 2
-LOOKS_PER_CAST = 120        # the most recent ones are kept, which is where a bite or a miss is decided
-RECORDED_WIDTH = 640        # as wide as the detector's own input, so nothing it uses is lost
-RECORD_EVERY_SEC = 0.3
+LOOKS_PER_CAST = 180        # the most recent ones are kept, which is where a bite or a miss is decided
+RECORDED_WIDTH = 512        # wider than the bobber watcher works at, and close to the detector's own input
+RECORD_EVERY_SEC = 0.15     # so that at the usual five looks a second every look is kept, and a cast can be replayed
 ALWAYS_RECORD_SCORE = 0.2   # a look this bite-like is kept however soon it comes after the last one
-JPEG_QUALITY = 85
+JPEG_QUALITY = 78
 
 
 class CastRecorder:
@@ -39,7 +39,8 @@ class CastRecorder:
             if not self._casts or self._casts[-1]['cast'] != cast:
                 self._casts.append({'cast': cast, 'looks': collections.deque(maxlen=LOOKS_PER_CAST)})
             looks = self._casts[-1]['looks']
-            if looks and seconds - looks[-1]['seconds'] < RECORD_EVERY_SEC and score < ALWAYS_RECORD_SCORE:
+            # Pictures from before the cast (negative time) are few and all needed to replay it.
+            if looks and 0 <= seconds - looks[-1]['seconds'] < RECORD_EVERY_SEC and seconds >= 0 and score < ALWAYS_RECORD_SCORE:
                 return
 
         frame = sighting.frame
@@ -55,9 +56,16 @@ class CastRecorder:
         found = sighting.detection
         look = {'seconds': round(float(seconds), 2), 'score': round(score, 4),
                 'sure_enough': bool(sighting.confident), 'held_back_because': sighting.note,
+                'spotted_by': getattr(sighting, 'by', ''),
                 'seen_size': [width, height],
                 'box_in_picture': [round(float(value) * scale, 1) for value in (found.x1, found.y1, found.x2, found.y2)],
                 'jpeg': jpeg.tobytes()}
+        movement = getattr(sighting, 'movement', None)
+        if movement is not None:
+            look['movement'] = {'phase': movement.phase, 'share_of_a_bite': round(float(movement.strength), 3),
+                                'bite': bool(movement.bite), 'bobber_still_there': bool(movement.still_out),
+                                'bobber_in_picture': None if movement.bobber is None else
+                                [round(float(value) * scale, 1) for value in movement.bobber]}
         with self._lock:
             looks.append(look)
 
@@ -76,9 +84,20 @@ def _summary(cast):
     line = (f'Cast {cast["cast"]}: {len(looks)} pictures from {looks[0]["seconds"]} s to {looks[-1]["seconds"]} s '
             f'after casting, each {surest["seen_size"][0]} x {surest["seen_size"][1]} as seen. '
             f'Surest look: {round(surest["score"] * 100)}% at {surest["seconds"]} s. ')
-    line += f'Sure enough to click at {clicked[0]["seconds"]} s.' if clicked else 'Never sure enough to click.'
+    line += (f'Sure enough to click at {clicked[0]["seconds"]} s (by its {clicked[0].get("spotted_by") or "look"}).'
+             if clicked else 'Never sure enough to click.')
     if held_back:
         line += f' Held back because: {"; ".join(held_back)}.'
+
+    watched = [look['movement'] for look in looks if 'movement' in look]
+    if watched:
+        found_at = next((look['seconds'] for look in looks if look.get('movement', {}).get('bobber_in_picture')), None)
+        if found_at is None:
+            line += ' By movement: the bobber was never found.'
+        else:
+            strongest = max(movement['share_of_a_bite'] for movement in watched)
+            line += (f' By movement: bobber found at {found_at} s; its strongest movement was {round(strongest * 100)}% of a bite'
+                     f'{"; it was pulled in" if any(movement["phase"] == "gone" for movement in watched) else ""}.')
     return line
 
 

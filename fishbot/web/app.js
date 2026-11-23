@@ -18,6 +18,7 @@ const STATUS = {
   stopped: ['Stopping…', ''],
 };
 const WATCH_NAMES = { full: 'the whole game', center75: 'the middle', center50: 'a small middle' };
+const SPOT_NAMES = { both: 'both ways', movement: 'by movement', look: 'by its look' };
 const LIVE_PICTURE_MS = 1400;
 const MAX_LOG_LINES = 200;
 const CHAT_MESSAGES_SENT = 12;
@@ -89,6 +90,7 @@ function settingText(name, value) {
   if (typeof value === 'boolean') return value ? 'on' : 'off';
   if (name === 'confidence') return `${Math.round(value * 100)}%`;
   if (name === 'scan_area') return WATCH_NAMES[value] || value;
+  if (name === 'spot_bites_by') return SPOT_NAMES[value] || value;
   if (name.endsWith('_key') || name.endsWith('_hotkey')) return value ? keyLabel(value) : 'not chosen';
   return String(value);
 }

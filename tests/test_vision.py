@@ -336,3 +336,125 @@ def test_capture_handles_are_let_go_per_thread():
     grabber.close()   # nothing left to close; must not fail
 
     assert closed == [True]
+
+
+# ----- spotting a bite by movement -----
+
+class LakeGrabber:
+    """The simulated lake as the screen. ``clock`` says what time it is in the scene."""
+
+    def __init__(self, lake, clock):
+        self.lake, self.clock = lake, clock
+
+    def grab(self, region):
+        frame = self.lake.frame(self.clock.now)
+        return frame[region['top']:region['top'] + region['height'], region['left']:region['left'] + region['width']].copy()
+
+
+class SceneClock:
+    now = 10.0
+
+    def __call__(self):
+        return self.now
+
+
+def watch_a_cast(watcher, lake, clock, window, spot, bite_after, until=10.0):
+    """Cast the way the engine does and look five times a second. Returns (seconds, position) of the bite, or None."""
+    for _ in range(3):
+        watcher.before_cast(window)
+        clock.now += 0.15
+    cast_at = clock.now
+    lake.cast(cast_at, spot=spot, bite_after=bite_after)
+    watcher.cast_started()
+    clock.now += 1.0
+    while clock.now - cast_at < until:
+        position = watcher.find_splash(window)
+        if position is not None:
+            return clock.now - cast_at, position
+        clock.now += 0.2
+    return None
+
+
+def test_by_movement_alone_it_clicks_the_bobber_when_the_fish_bites():
+    from tests.lake import Lake
+
+    lake, clock = Lake(seed=11), SceneClock()
+    window = {'left': 0, 'top': 0, 'width': 1918, 'height': 1080}
+    watcher = vision.Vision(None, LakeGrabber(lake, clock), confidence=0.8, scan_area='full',   # no model is needed
+                            spot_bites_by='movement', clock=clock)
+    spot = lake.random_spot()
+
+    seconds, position = watch_a_cast(watcher, lake, clock, window, spot, bite_after=5.0)
+
+    assert 5.0 <= seconds <= 5.8
+    assert position == pytest.approx(spot, abs=40)        # on the bobber, which is about 100 across
+    assert watcher.last.by == 'movement' and watcher.last.confident
+    assert watcher.last.movement.bobber is not None
+    assert vision.render_preview(watcher.last)[:2] == b'\xff\xd8'
+
+
+def test_by_movement_it_says_how_close_a_cast_with_no_bite_came():
+    from tests.lake import Lake
+
+    lake, clock = Lake(seed=12), SceneClock()
+    window = {'left': 0, 'top': 0, 'width': 1918, 'height': 1080}
+    watcher = vision.Vision(None, LakeGrabber(lake, clock), confidence=0.8, scan_area='full',
+                            spot_bites_by='movement', clock=clock)
+
+    assert watch_a_cast(watcher, lake, clock, window, lake.random_spot(), bite_after=None, until=6.0) is None
+
+    assert watcher.bobber_still_out and not watcher.cast_is_over
+    reason = watcher.why_no_bite(None)
+    assert reason.startswith('It watched your bobber, and ')
+    assert 'pulled in' not in reason
+
+
+def test_by_movement_a_bobber_that_cannot_be_found_is_said_plainly():
+    from tests.lake import Lake
+
+    lake, clock = Lake(seed=12), SceneClock()
+    window = {'left': 0, 'top': 0, 'width': 1918, 'height': 1080}
+    watcher = vision.Vision(None, LakeGrabber(lake, clock), confidence=0.8, scan_area='full',
+                            spot_bites_by='movement', clock=clock)
+    for _ in range(3):
+        watcher.before_cast(window)
+    watcher.cast_started()          # the fishing key did nothing in the game: no bobber ever lands
+    for _ in range(40):
+        clock.now += 0.2
+        assert watcher.find_splash(window) is None
+
+    assert watcher.why_no_bite(None) == 'It could not find your bobber after the cast.'
+
+
+def test_by_look_alone_nothing_about_movement_is_done(splash_detector, calm):
+    watcher = vision.Vision(splash_detector, ArrayGrabber(calm), confidence=0.8, scan_area='full')
+
+    assert watcher.before_cast(dict(demo.REGION)) is None
+    watcher.cast_started()
+    watcher.find_splash(dict(demo.REGION))
+
+    assert watcher.last.movement is None
+    assert not watcher.bobber_still_out and not watcher.cast_is_over
+    assert watcher.why_no_bite(0.02) == 'It saw nothing that looked like one.'
+    assert watcher.why_no_bite(0.64) == 'The closest thing it saw was 64% sure, and it needs 80%.'
+
+
+def test_both_ways_the_look_still_counts_and_the_reason_names_both(splash_detector):
+    game_clock = SceneClock()
+    game = demo.DemoGame(bite_after=(1000, 1000), clock=game_clock)
+    watcher = vision.Vision(splash_detector, demo.DemoGrabber(game), confidence=0.99, scan_area='full',
+                            spot_bites_by='both', clock=game_clock)
+    for _ in range(3):
+        watcher.before_cast(dict(demo.REGION))
+        game_clock.now += 0.15
+    game.cast()
+    watcher.cast_started()
+    best = 0.0
+    for _ in range(20):
+        game_clock.now += 0.2
+        watcher.find_splash(dict(demo.REGION))
+        best = max(best, watcher.last.detection.score)
+
+    assert watcher.last.movement is not None and watcher.last.movement.bobber is not None
+    assert watcher.why_no_bite(0.64) == ('It watched your bobber, and it never moved like a bite. '
+                                         'By its look, the closest thing it saw was 64% sure, and it needs 99%.')

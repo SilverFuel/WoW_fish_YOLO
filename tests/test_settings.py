@@ -66,6 +66,7 @@ def test_valid_changes_are_applied_and_normalised():
     ({'fishing_key': None}, 'fishing_key'),
     ({'stop_after_minutes': [5]}, 'stop_after_minutes'),
     ({'stop_after_catches': -1}, 'stop_after_catches'),
+    ({'spot_bites_by': 'sound'}, 'spot_bites_by'),
     ({'stop_after_catches': 10001}, 'stop_after_catches'),
 ])
 def test_invalid_values_are_rejected_and_leave_the_setting_alone(changes, field):
@@ -258,3 +259,10 @@ def test_a_range_is_explained_in_the_units_the_person_types():
     # "How sure it must be" is typed as a percentage and stored as a fraction.
     assert change({'confidence': 0.99})[1] == {'confidence': 'must be between 50% and 95%'}
     assert change({'cast_seconds': 2})[1] == {'cast_seconds': 'must be between 5 and 60'}
+
+
+def test_a_bite_is_spotted_both_ways_unless_chosen_otherwise():
+    assert Settings().spot_bites_by == 'both'
+    for choice in ('both', 'movement', 'look'):
+        settings, errors = change({'spot_bites_by': choice})
+        assert errors == {} and settings.spot_bites_by == choice

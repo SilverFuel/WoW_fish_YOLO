@@ -17,16 +17,16 @@ def sighting(score, width=1920, height=1080, note=''):
 
 def test_looks_are_kept_small_and_spaced_out_but_a_bite_like_look_is_never_skipped():
     recorder = report.CastRecorder()
-    for seconds in (1.0, 1.1, 1.2, 1.35, 1.5, 1.7):   # looks come faster than pictures are kept
+    for seconds in (1.0, 1.05, 1.1, 1.3, 1.36, 1.6):  # looks come faster than pictures are kept
         recorder.look(1, seconds, sighting(0.02))
-    recorder.look(1, 1.75, sighting(0.91))            # right after the last one, but it looks like a bite
+    recorder.look(1, 1.63, sighting(0.91))            # right after the last one, but it looks like a bite
 
     looks = recorder.casts()[0]['looks']
 
-    assert [look['seconds'] for look in looks] == [1.0, 1.35, 1.7, 1.75]
+    assert [look['seconds'] for look in looks] == [1.0, 1.3, 1.6, 1.63]
     assert looks[-1]['score'] == 0.91 and looks[-1]['sure_enough'] is True
     assert looks[0]['seen_size'] == [1920, 1080]
-    assert looks[0]['box_in_picture'] == [300.0, 166.7, 340.0, 193.3]   # the box, scaled with the picture
+    assert looks[0]['box_in_picture'] == [240.0, 133.3, 272.0, 154.7]   # the box, scaled with the picture
     picture = np.frombuffer(looks[0]['jpeg'], dtype=np.uint8)
     assert picture[:2].tobytes() == b'\xff\xd8'
 
@@ -71,3 +71,29 @@ def test_a_report_with_nothing_recorded_still_says_so():
     data = report.build('2.0.0', [], {}, {}, [], [], [], None)
 
     assert 'No cast has been recorded yet.' in zipfile.ZipFile(io.BytesIO(data)).read('report.txt').decode()
+
+
+def test_what_the_bobber_watcher_saw_goes_into_the_report():
+    from fishbot.motion import Movement
+
+    def watched(score, movement, by=''):
+        look = sighting(score)
+        return Sighting(look.frame, look.detection, by != '', movement=movement, by=by)
+
+    recorder = report.CastRecorder()
+    recorder.look(3, -0.3, watched(0.0, None))                                   # before the cast: always kept
+    recorder.look(3, -0.15, watched(0.0, None))
+    recorder.look(3, 1.0, watched(0.0, Movement('looking', None, None, 0.0, False, False)))
+    recorder.look(3, 2.0, watched(0.0, Movement('watching', (960, 540), (900, 480, 1020, 600), 0.2, False, True)))
+    recorder.look(3, 7.0, watched(0.0, Movement('watching', (960, 540), (900, 480, 1020, 600), 1.6, True, True), by='movement'))
+
+    looks = recorder.casts()[0]['looks']
+    data = report.build('2.0.0', [], {}, {}, [], recorder.casts(), [], None)
+    text = zipfile.ZipFile(io.BytesIO(data)).read('report.txt').decode()
+
+    assert [look['seconds'] for look in looks] == [-0.3, -0.15, 1.0, 2.0, 7.0]
+    assert looks[3]['movement'] == {'phase': 'watching', 'share_of_a_bite': 0.2, 'bite': False, 'bobber_still_there': True,
+                                    'bobber_in_picture': [256.0, 144.0]}
+    assert looks[4]['spotted_by'] == 'movement'
+    assert 'Sure enough to click at 7.0 s (by its movement).' in text
+    assert 'By movement: bobber found at 2.0 s; its strongest movement was 160% of a bite.' in text

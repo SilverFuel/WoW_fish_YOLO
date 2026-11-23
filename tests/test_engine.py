@@ -1277,3 +1277,83 @@ def test_stopping_after_misses_says_how_close_it_came_and_what_to_change():
 
     assert game.bot.stop_reason == ('Stopped: no bite in 2 casts in a row. The closest thing it saw was 71% sure, and it needs 80%. '
                                     'If it keeps coming that close, lower "How sure it must be" under More options.')
+
+
+# ----- spotting a bite by movement: what the fishing loop does for it -----
+
+class WatchesTheBobber(FakeVision):
+    """A vision that wants pictures before the cast and reports on the bobber, as the real one can."""
+
+    def __init__(self, clock, on_frame=lambda frame: None):
+        super().__init__(clock, on_frame)
+        self.calls = []
+        self.bobber_still_out = False
+        self.cast_is_over = False
+        self.last = SimpleNamespace(detection=SimpleNamespace(score=0.0), confident=False, note='')
+
+    def before_cast(self, region):
+        self.calls.append('before')
+        return self.last
+
+    def cast_started(self):
+        self.calls.append('cast')
+
+    def find_splash(self, region):
+        self.calls.append('look')
+        return super().find_splash(region)
+
+    def why_no_bite(self, best_score):
+        return 'It watched your bobber, and it never moved like a bite.'
+
+
+def with_bobber_watching(settings=BASE, on_frame=lambda frame: None):
+    game = Game(settings=settings)
+    game.bot._vision = game.vision = WatchesTheBobber(game.clock, on_frame)
+    return game
+
+
+def test_the_water_is_looked_at_before_each_cast_and_the_vision_is_told_when_it_is_made():
+    game = with_bobber_watching(settings=replace(BASE, stop_after_misses=1))
+    recorded = []
+    game.bot._on_look = lambda cast, seconds, sighting: recorded.append((cast, round(seconds, 2)))
+
+    game.bot.run()
+
+    assert game.vision.calls[:5] == ['before', 'before', 'before', 'cast', 'look']
+    first_key = game.controls.presses('f')[0]
+    assert first_key >= engine.PICTURES_BEFORE_CAST * engine.BEFORE_CAST_GAP_SEC      # the pictures came first
+    assert recorded[:3] == [(1, -0.45), (1, -0.3), (1, -0.15)]                        # kept with the cast they belong to
+    assert 'No bite on that cast. It watched your bobber, and it never moved like a bite.' in game.messages
+
+
+def test_a_bobber_that_has_been_pulled_in_ends_the_cast_early():
+    def pulled_in_after_a_while(frame):
+        if frame == 12:
+            game.vision.cast_is_over = True
+        return None
+
+    game = with_bobber_watching(settings=replace(BASE, stop_after_misses=1), on_frame=pulled_in_after_a_while)
+
+    game.bot.run()
+
+    assert game.vision.frames == 12
+    assert game.clock.now < BASE.cast_seconds / 2
+
+
+def test_while_the_bobber_still_floats_the_cast_gets_longer_but_not_for_ever():
+    game = with_bobber_watching(settings=replace(BASE, stop_after_misses=1))
+    game.vision.bobber_still_out = True      # as in versions of the game where a cast lasts longer than the wait set
+
+    game.bot.run()
+
+    waited = game.vision.times[-1] - game.controls.presses('f')[0]
+    assert BASE.cast_seconds + engine.LONGEST_EXTRA_WAIT_SEC - 1 <= waited <= BASE.cast_seconds + engine.LONGEST_EXTRA_WAIT_SEC + 1
+
+
+def test_a_vision_that_knows_nothing_of_bobbers_is_left_alone():
+    game = Game(settings=replace(BASE, stop_after_misses=1), on_frame=lambda frame: None)
+
+    game.bot.run()
+
+    assert game.controls.presses('f')[0] < 0.2        # no pictures first, so the cast comes at once
+    assert 'No bite on that cast.' in game.messages

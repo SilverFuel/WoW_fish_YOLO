@@ -172,6 +172,44 @@ def test_a_test_cast_is_one_cast_and_hands_the_page_back(service, platform):
     assert service.store.settings.stop_after_catches == 0  # the saved settings are untouched
 
 
+def test_by_movement_alone_it_fishes_without_the_model_having_a_say(service, platform):
+    service.store.update({'spot_bites_by': 'movement'})
+
+    service.start()
+    assert wait_for(lambda: service.snapshot()['stats']['looted'] >= 2, timeout=40)
+    service.stop()
+    service.wait(10)
+
+    snapshot = service.snapshot()
+    clicks = [event for event in platform.game.events if event[0] == 'click']
+    assert len(clicks) >= 2
+    for click, landing in zip(clicks, platform.game.landings):
+        assert click[2:] == pytest.approx(landing, abs=12)      # on the bobber, wherever it landed
+    assert all(click['score'] == 0 for click in snapshot['clicks'])   # the model was never asked
+
+
+def test_practice_goes_by_look_whatever_is_chosen(service, monkeypatch):
+    # Practice has no cast of its own, so there is nothing to find a bobber after.
+    import fishbot.service as service_module
+
+    chosen = []
+    real_vision = service_module.Vision
+
+    def remember(*arguments, **options):
+        chosen.append(options.get('spot_bites_by'))
+        return real_vision(*arguments, **options)
+
+    monkeypatch.setattr(service_module, 'Vision', remember)
+    service.store.update({'spot_bites_by': 'movement'})
+
+    service.start(practice=True)
+    assert wait_for(lambda: service.snapshot()['state'] == 'practice')
+    service.stop()
+    service.wait(10)
+
+    assert chosen == ['look']
+
+
 def test_a_test_cast_ends_rather_than_pauses_when_the_mouse_is_taken(service, monkeypatch):
     # A paused test cast would never finish, and the page would wait for it for ever.
     import fishbot.service as service_module
@@ -206,7 +244,8 @@ def test_a_test_cast_with_no_bite_says_so_without_an_alarm(service, platform):
 
     snapshot = service.snapshot()
     assert snapshot['test_result'] == 'no_bite'
-    assert snapshot['message'] == 'The test cast saw no bite. It saw nothing that looked like one.'
+    assert snapshot['message'] == ('The test cast saw no bite. It watched your bobber until it was pulled in, '
+                                   'and it never moved like a bite.')
     assert snapshot['stopped_by_safeguard'] is False
     assert platform.brought_back == ['the page']
 

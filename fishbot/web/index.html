@@ -147,7 +147,7 @@
     <div class="preview-frame">
       <img id="preview" alt="The latest picture it took of the game">
     </div>
-    <p class="quiet">A green box is a bite it would click. An orange box is something it noticed but would not click.</p>
+    <p class="quiet">A white box is where it has found your bobber. A green box is a bite it would click. An orange box is something it noticed but would not click.</p>
   </section>
 
   <details class="card" id="clicks-block" hidden>
@@ -180,6 +180,15 @@
         </div>
         <p class="field-error" data-error-for="lure_minutes"></p>
       </div>
+
+      <h3>How it spots a bite</h3>
+      <div class="choices" role="radiogroup" aria-label="How it spots a bite">
+        <label><input type="radio" name="spot_bites_by" value="both" data-setting="spot_bites_by"><span><b>Both ways</b><small>Works in every version</small></span></label>
+        <label><input type="radio" name="spot_bites_by" value="movement" data-setting="spot_bites_by"><span><b>By movement</b><small>For Classic; lightest</small></span></label>
+        <label><input type="radio" name="spot_bites_by" value="look" data-setting="spot_bites_by"><span><b>By its look</b><small>Cataclysm and later</small></span></label>
+      </div>
+      <p class="quiet">By movement, it finds your bobber after each cast and watches it for the jolt of a bite. By its look, it recognises the spray, which it learnt from the Cataclysm version of the game.</p>
+      <p class="field-error" data-error-for="spot_bites_by"></p>
 
       <h3>Go easier on my computer</h3>
       <div class="choices" role="radiogroup" aria-label="How much of the game it watches">
@@ -230,7 +239,7 @@
       </div>
       <p class="field-error" data-error-for="cast_seconds"></p>
       <div class="row">
-        <label for="confidence">How sure it must be <small>Lower it a little if it keeps missing bites.</small></label>
+        <label for="confidence">How sure it must be <small>For spotting a bite by its look. Lower it a little if it keeps missing bites.</small></label>
         <span class="with-unit"><input type="number" id="confidence" data-setting="confidence" data-percent min="50" max="95" inputmode="numeric"> %</span>
       </div>
       <p class="field-error" data-error-for="confidence"></p>

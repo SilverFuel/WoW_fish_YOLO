@@ -39,8 +39,11 @@ The page says why and shows what to do:
   soon, or that keep landing on the very same spot. Something that looks like a bite, shows up more than two
   seconds after each cast and moves around would keep being clicked and counted as caught. **What it clicked**
   is how you would notice, so look at it after your first runs.
-- It cannot tell your bobber from someone else's. Where other people fish in view, it can click their bite
-  instead of yours. Watching only the middle of the game, under **More options**, keeps most of them out.
+- By its look, it cannot tell your bobber from someone else's: where other people fish in view, it can click
+  their bite instead of yours. By movement it watches only the bobber it found after your cast, which keeps
+  theirs out unless one lands in the same moment as yours.
+- Spotting a bite by movement has only been tried against a simulation, not the game. Until it has proved
+  itself for you, look at **What it clicked** after your first casts.
 - It cannot see your bags, or whether a fish reached them. With full bags, or with Auto Loot switched off, it
   keeps casting and clicking, but nothing is kept, and **Caught** keeps counting, because it counts a catch when
   it clicks the bobber. Make room first and set a limit

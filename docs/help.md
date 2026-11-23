@@ -62,16 +62,25 @@ A few things are different on a Mac:
 **It casts, but it never clicks the bobber.** Look at the line under the big word at the top of the page, or
 open **What it has been doing**. After each cast it says why it did not click:
 
-- *"It saw nothing that looked like one"*: it is not seeing your bobber's splash at all. Press **Check my
-  game**: the picture has to show your game zoomed all the way in, with no buttons or bars. If you chose
+- *"It could not find your bobber after the cast"*: the bobber has to land inside the picture, on open water.
+  Press **Check my game**: it has to show your game zoomed all the way in, with no buttons or bars. If you chose
   **Watch the middle** or **Watch a small middle**, go back to **Watch the whole game**.
-- *"The closest thing it saw was 64% sure, and it needs 80%"*: it sees the splash but is not sure enough. Open
-  **More options** and lower **How sure it must be** to just under the number it reports.
+- *"It watched your bobber, and the most it moved was 40% of what a bite takes"*: it found the bobber and saw
+  it move, but not enough to call it a bite. Send a report (below), which shows exactly how it moved.
+- *"The closest thing it saw was 64% sure, and it needs 80%"*: by its look, it sees the spray but is not sure
+  enough. Open **More options** and lower **How sure it must be** to just under the number it reports.
 - *"Ignored something that looked like a bite"*: it was sure, but one of its safety rules held it back, and it
   says which.
 
 If none of that explains it, press **Save a report** at the bottom of the page and send that file to whoever
 is helping you. It holds small pictures of the game from the last casts, so they can see exactly what it saw.
+
+**I play Classic.** The part that recognises a bite by its look learnt from the Cataclysm version, where the
+water and the spray look different, and it often does not recognise a Classic bite. That is why it also
+spots a bite by movement: after each cast it finds your bobber, shown as a white box under **What it sees**,
+and watches it for the jolt of a bite. Both ways run together unless you choose otherwise under **More
+options**, **How it spots a bite**. A cast lasts longer in Classic, and it waits for as long as it can still
+see your bobber floating.
 
 **The page did not come back after a check or a test cast.** Your computer did not allow it that time. Switch
 back to your browser yourself; the result is waiting there.
@@ -84,11 +93,11 @@ back to your browser yourself; the result is waiting there.
 game, zoomed all the way in, with no buttons or bars. If that looks right and it still misses bites, stop it,
 open **More options** and lower **How sure it must be** a little.
 
-**It gets confused when other people are fishing nearby.** It looks for a bite anywhere in the part of the game
-it watches, and it cannot tell your bobber from someone else's. Open **More options** and choose **Watch the
-middle** or **Watch a small middle**, so bobbers off to the sides are ignored; **Check my game** shows the area
-as a blue box, and your own bobber has to land inside it. Turning so that no other bobbers are in view works
-too.
+**It gets confused when other people are fishing nearby.** By its look, it takes a bite anywhere in the part
+of the game it watches, and cannot tell your bobber from someone else's. By movement it only watches your own
+bobber, so open **More options** and choose **By movement** under **How it spots a bite**. If another bobber
+lands in the very moment yours does, it can still pick the wrong one. Turning so that no other bobbers are in
+view helps too.
 
 **It paused and I did not touch the mouse.** It lets go when the mouse pointer moves clearly, or when the
 pointer does not end up where it put it. If something on your computer moves or holds the pointer, open **More
